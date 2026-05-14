@@ -8,13 +8,37 @@
       "Bash(mypy:*)",
       "Bash(pytest:*)",
       "Bash(git:*)",
+      "Bash(source .venv:*)",
+      "Bash(cd:* && source:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(sort:*)",
+      "Bash(echo:*)",
+      "Bash(date:*)",
+      "Bash(tree:*)",
       "Read(D:\\编程\\2 fantastic chord/**)",
       "Glob",
       "Grep"
     ],
     "deny": [
       "Bash(pip install:*)",
-      "Bash(pip uninstall:*)"
+      "Bash(pip uninstall:*)",
+      "Bash(git push*--force:*)",
+      "Bash(git push*-f:*)",
+      "Bash(git branch* -D:*)",
+      "Bash(git branch* --delete --force:*)",
+      "Bash(git reset*--hard:*)",
+      "Bash(git clean* -f:*)",
+      "Bash(git checkout*--:*)",
+      "Bash(rm -rf:*)",
+      "Bash(del /f:*)"
     ]
   },
   "hooks": {
