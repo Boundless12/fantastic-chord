@@ -7,6 +7,10 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..sequencer.drum_pattern import DrumPattern
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +163,15 @@ class StyleManager:
 
     def get(self, name: str) -> StyleDefinition | None:
         return self.styles.get(name)
+
+    def get_drum_pattern(self, style_slug: str) -> DrumPattern | None:
+        """Generate a concrete DrumPattern from a style's drum_patterns reference."""
+        from .drum_patterns import DrumPatternParser
+
+        style = self.styles.get(style_slug)
+        if style is None:
+            return None
+        return DrumPatternParser.parse(style.drum_patterns)
 
     def list_styles(self) -> list[str]:
         return sorted(self.styles.keys())

@@ -1,0 +1,105 @@
+{
+  "name": "Noise Riser",
+  "category": "fx",
+  "osc1": {
+    "waveform": "saw",
+    "octave": 0,
+    "semitones": 0,
+    "detune_cents": 0.0,
+    "pulse_width": 0.5,
+    "phase": 0.0,
+    "wavetable_index": 0,
+    "fm_source": "none",
+    "fm_amount": 0.0
+  },
+  "osc2": {
+    "waveform": "saw",
+    "octave": 0,
+    "semitones": 0,
+    "detune_cents": 0.0,
+    "pulse_width": 0.5,
+    "phase": 0.0,
+    "wavetable_index": 0,
+    "fm_source": "none",
+    "fm_amount": 0.0
+  },
+  "mixer": {
+    "osc1_level": 0.5,
+    "osc2_level": 0.0,
+    "noise_level": 0.6,
+    "sub_osc_level": 0.0,
+    "ring_mod": 0.0
+  },
+  "sub_osc": {
+    "enabled": false,
+    "waveform": "square",
+    "octave": -1
+  },
+  "noise": {
+    "level": 0.0,
+    "color": 0.5,
+    "stereo_spread": 0.0
+  },
+  "filter": {
+    "filter_type": "lowpass",
+    "cutoff": 200.0,
+    "resonance": 0.0,
+    "key_track": 0.0,
+    "drive": 0.0,
+    "env_amount": 0.9,
+    "velocity_to_cutoff": 0.0,
+    "cutoff_link": 1.0,
+    "slope": "24db"
+  },
+  "amp_env": {
+    "attack": 1.5,
+    "decay": 0.5,
+    "sustain": 0.8,
+    "release": 1.0,
+    "velocity_to_amp": 0.5
+  },
+  "filter_env": {
+    "attack": 1.5,
+    "decay": 0.5,
+    "sustain": 0.5,
+    "release": 0.8,
+    "velocity_to_env": 0.0
+  },
+  "lfo1": {
+    "waveform": "saw_up",
+    "rate": 0.5,
+    "rate_sync": false,
+    "rate_sync_subdiv": "1/4",
+    "depth": 0.6,
+    "phase": 0.0,
+    "fade_in": 0.0,
+    "target": "filter_cutoff",
+    "key_sync": true,
+    "one_shot": false
+  },
+  "lfo2": {
+    "waveform": "sine",
+    "rate": 1.0,
+    "rate_sync": false,
+    "rate_sync_subdiv": "1/4",
+    "depth": 0.0,
+    "phase": 0.0,
+    "fade_in": 0.0,
+    "target": "none",
+    "key_sync": true,
+    "one_shot": false
+  },
+  "effects": {
+    "reverb_send": 0.3,
+    "delay_send": 0.15,
+    "chorus_send": 0.0,
+    "distortion_drive": 0.0
+  },
+  "portamento": {
+    "time": 0.0,
+    "mode": "off",
+    "polyphony": "poly",
+    "bend_range": 2,
+    "unison_detune": 0.2
+  }
+}

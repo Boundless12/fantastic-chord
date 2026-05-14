@@ -14,10 +14,13 @@ class KnobWidget(QWidget):
       - Vertical drag: change value
       - Scroll wheel: change value
       - Ctrl+scroll: fine adjust
+      - Shift+drag: fine adjust
       - Double-click: reset to default
+      - Right-click: context menu (CC learn)
     """
 
     value_changed = Signal(float)
+    context_menu_requested = Signal()
 
     _value: float
     _default_value: float
@@ -30,6 +33,7 @@ class KnobWidget(QWidget):
     _dragging: bool
     _drag_start_y: float
     _drag_start_value: float
+    _display_map: list[str] | None
 
     def __init__(
         self,
@@ -39,6 +43,7 @@ class KnobWidget(QWidget):
         bipolar: bool = False,
         step: float = 0.0,
         parent: QWidget | None = None,
+        display_map: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self._value = default_value
@@ -52,6 +57,7 @@ class KnobWidget(QWidget):
         self._dragging = False
         self._drag_start_y = 0
         self._drag_start_value = default_value
+        self._display_map = display_map
         self.setFixedSize(56, 72)
         self.setMouseTracking(True)
 
@@ -59,9 +65,9 @@ class KnobWidget(QWidget):
         return self._value
 
     def set_value(self, v: float, emit: bool = True) -> None:
-        self._value = max(self._min, min(self._max, v))
         if self._step > 0.0:
-            self._value = round(self._value / self._step) * self._step
+            v = round(v / self._step) * self._step
+        self._value = max(self._min, min(self._max, v))
         self.update()
         if emit:
             self.value_changed.emit(self._value)
@@ -69,7 +75,28 @@ class KnobWidget(QWidget):
     def set_default(self, v: float) -> None:
         self._default_value = v
 
+    def set_range(self, min_val: float, max_val: float) -> None:
+        self._min = min_val
+        self._max = max_val
+        self._value = max(min_val, min(max_val, self._value))
+        self.update()
+
     def _format_value(self) -> str:
+        if self._display_map is not None:
+            n = len(self._display_map)
+            idx = max(
+                0,
+                min(
+                    n - 1,
+                    (
+                        int(self._value * (n - 1) + 0.5)
+                        if self._bipolar is False and self._min >= 0.0
+                        else int((self._value - self._min) / (self._max - self._min) * (n - 1) + 0.5)
+                    ),
+                ),
+            )
+            return self._display_map[idx]
+
         if self._value_format == "percent":
             return f"{int(self._value * 100)}"
         elif self._value_format == "hz":
@@ -92,6 +119,8 @@ class KnobWidget(QWidget):
             return f"{self._value * 100 - 50:.0f}c"
         elif self._value_format == "ratio":
             return f"{self._value:.2f}"
+        elif self._value_format == "int":
+            return f"{int(self._value)}"
         return f"{self._value:.2f}"
 
     def paintEvent(self, event: object) -> None:
@@ -101,13 +130,11 @@ class KnobWidget(QWidget):
         cx, cy = w / 2, 28
         radius = 20
 
-        # Track arc (270 degrees from 135 to 405)
         track_rect = QRectF(cx - radius, cy - radius, radius * 2, radius * 2)
         pen = QPen(QColor(COLOR_KNOB_TRACK), 3)
         painter.setPen(pen)
         painter.drawArc(track_rect, 135 * 16, 270 * 16)
 
-        # Value arc
         if self._bipolar:
             span = int(270 * (self._value - self._min) / (self._max - self._min))
         else:
@@ -116,14 +143,12 @@ class KnobWidget(QWidget):
         painter.setPen(pen)
         painter.drawArc(track_rect, 135 * 16, -span * 16)
 
-        # Value text in center
         painter.setPen(QColor(COLOR_TEXT))
         font = painter.font()
         font.setPointSize(FONT_SIZE_SM - 2)
         painter.setFont(font)
         painter.drawText(QRectF(cx - 18, cy - 8, 36, 16), Qt.AlignmentFlag.AlignCenter, self._format_value())
 
-        # Label below
         painter.setPen(QColor(COLOR_TEXT_DIM))
         font = painter.font()
         font.setPointSize(FONT_SIZE_SM - 4)
@@ -131,7 +156,9 @@ class KnobWidget(QWidget):
         painter.drawText(QRectF(0, 52, w, 14), Qt.AlignmentFlag.AlignCenter, self._display_name)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.RightButton:
+            self.context_menu_requested.emit()
+        elif event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
             self._drag_start_y = event.globalPosition().y()
             self._drag_start_value = self._value

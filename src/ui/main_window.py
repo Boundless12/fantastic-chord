@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDockWidget,
     QMainWindow,
@@ -17,6 +17,7 @@ from ..sequencer.piano_roll import PianoRollModel
 from ..sequencer.transport import Transport
 from .keyboard_widget import KeyboardWidget
 from .piano_roll_widget import PianoRollWidget
+from .synth_panel import SynthPanel
 from .transport import TransportWidget
 from .waveform_display import WaveformDisplay
 
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     """酷和弦 main application window."""
 
+    midi_cc_received = Signal(int, int)
+
     audio_engine: AudioEngine
     sequencer_transport: Transport
     piano_roll_model: PianoRollModel
@@ -33,14 +36,15 @@ class MainWindow(QMainWindow):
     transport_widget: TransportWidget
     piano_roll_widget: PianoRollWidget
     waveform_display: WaveformDisplay
+    synth_panel: SynthPanel
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("酷和弦 — Cool Chord EDM Synthesizer")
         self.resize(1400, 900)
 
-        self.audio_engine = AudioEngine()
         self.sequencer_transport = Transport()
+        self.audio_engine = AudioEngine(transport=self.sequencer_transport)
         self.piano_roll_model = PianoRollModel(self.sequencer_transport)
 
         self._setup_central()
@@ -75,7 +79,15 @@ class MainWindow(QMainWindow):
         transport_dock.setMaximumHeight(60)
         self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, transport_dock)
 
-        # Waveform dock — right
+        # Synth panel dock — right
+        self.synth_panel = SynthPanel()
+        self.synth_panel.set_engine(self.audio_engine)
+        synth_dock = QDockWidget("Synthesizer", self)
+        synth_dock.setWidget(self.synth_panel)
+        synth_dock.setMinimumWidth(320)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, synth_dock)
+
+        # Waveform dock — right (below synth panel)
         self.waveform_display = WaveformDisplay()
         waveform_dock = QDockWidget("Oscilloscope", self)
         waveform_dock.setWidget(self.waveform_display)
@@ -102,6 +114,7 @@ class MainWindow(QMainWindow):
         view_menu = menubar.addMenu("&View")
         view_menu.addAction("Toggle &Keyboard", self._on_toggle_keyboard)
         view_menu.addAction("Toggle &Transport", self._on_toggle_transport)
+        view_menu.addAction("Toggle &Synth Panel", self._on_toggle_synth_panel)
 
         audio_menu = menubar.addMenu("&Audio")
         audio_menu.addAction("Audio &Settings...", self._on_audio_settings)
@@ -117,12 +130,20 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         self.keyboard_widget.note_on.connect(self._on_keyboard_note_on)
         self.keyboard_widget.note_off.connect(self._on_keyboard_note_off)
+        self.synth_panel.cc_learn_started.connect(self._on_cc_learn_started)
+        self.synth_panel.cc_learn_finished.connect(self._on_cc_learn_finished)
 
     def _on_keyboard_note_on(self, note: int, velocity: int) -> None:
         self.audio_engine.note_on(note, velocity)
 
     def _on_keyboard_note_off(self, note: int) -> None:
-        logger.debug(f"Keyboard note off: {note}")
+        self.audio_engine.note_off(note)
+
+    def _on_cc_learn_started(self) -> None:
+        self.statusBar().showMessage("MIDI CC Learn: move a controller on your MIDI device...")
+
+    def _on_cc_learn_finished(self, cc_number: int, param_path: str) -> None:
+        self.statusBar().showMessage(f"CC {cc_number} mapped to {param_path}")
 
     def _on_new_project(self) -> None:
         logger.info("New project")
@@ -150,6 +171,9 @@ class MainWindow(QMainWindow):
 
     def _on_toggle_transport(self) -> None:
         logger.debug("Toggle transport")
+
+    def _on_toggle_synth_panel(self) -> None:
+        logger.debug("Toggle synth panel")
 
     def _on_audio_settings(self) -> None:
         logger.info("Audio settings")

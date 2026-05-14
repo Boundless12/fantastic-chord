@@ -1,7 +1,7 @@
 """AudioEngine: Real-time audio engine with sounddevice callback.
 
-Manages the synth voice pool, processes commands from the GUI thread,
-and renders audio in a high-priority callback thread.
+Manages the synth voice pool and drum voice pool, processes commands
+from the GUI thread, and renders audio in a high-priority callback thread.
 """
 
 from __future__ import annotations
@@ -16,7 +16,13 @@ import numpy as np
 import numpy.typing as npt
 import sounddevice as sd
 
-from .constants import BLOCK_SIZE, CHANNELS, MAX_SYNTH_VOICES, SAMPLE_RATE
+from ..sequencer.drum_pattern import DrumPattern
+from ..sequencer.drum_sequencer import DrumSequencer, TriggerEvent
+from ..sequencer.transport import Transport
+from .constants import BLOCK_SIZE, CHANNELS, MAX_DRUM_VOICES, MAX_SYNTH_VOICES, SAMPLE_RATE
+from .drum_kit import DRUM_KIT_PRESETS, DrumKitPreset
+from .drum_synth import DrumSynth
+from .drum_voice import DrumVoice
 from .effects import Chorus, Delay, Distortion, Reverb
 from .patch import Patch
 from .synth_voice import SynthVoice
@@ -35,6 +41,13 @@ class AudioEngine:
     master_volume: float
     is_running: bool
 
+    # Drum engine
+    drum_voices: list[DrumVoice]
+    drum_synth: DrumSynth
+    drum_sequencer: DrumSequencer
+    current_drum_kit: DrumKitPreset | None
+    transport: Transport
+
     command_queue: queue.Queue[VoiceCommand]
     meter_queue: queue.Queue[tuple[float, float]]
 
@@ -42,6 +55,7 @@ class AudioEngine:
     _stream_thread: threading.Thread | None
     _note_to_voice: dict[int, int]
     _voice_ages: list[int]
+    _drum_voice_ages: list[int]
 
     # Master effects
     reverb: Reverb
@@ -49,7 +63,12 @@ class AudioEngine:
     chorus: Chorus
     distortion: Distortion
 
-    def __init__(self, sample_rate: int = SAMPLE_RATE, block_size: int = BLOCK_SIZE) -> None:
+    def __init__(
+        self,
+        sample_rate: int = SAMPLE_RATE,
+        block_size: int = BLOCK_SIZE,
+        transport: Transport | None = None,
+    ) -> None:
         self.sample_rate = sample_rate
         self.block_size = block_size
         self.master_volume = 0.8
@@ -62,6 +81,16 @@ class AudioEngine:
         self._stream_thread = None
         self._note_to_voice = {}
         self._voice_ages = [0] * MAX_SYNTH_VOICES
+
+        # Drum engine init
+        self.drum_voices = [DrumVoice(sample_rate) for _ in range(MAX_DRUM_VOICES)]
+        self.drum_synth = DrumSynth(sample_rate)
+        self.drum_sequencer = DrumSequencer(transport or Transport())
+        self.current_drum_kit = DRUM_KIT_PRESETS.get("909 House")
+        self.transport = self.drum_sequencer._transport
+        self._drum_voice_ages = [0] * MAX_DRUM_VOICES
+
+        self._current_patch: Patch | None = None
 
         self.reverb = Reverb()
         self.delay = Delay()
@@ -114,6 +143,8 @@ class AudioEngine:
             self._output_stream = None
         logger.info("Audio engine stopped")
 
+    # -- Synth voice commands --
+
     def note_on(self, note: int, velocity: int) -> None:
         self.command_queue.put(("note_on", str(note), str(velocity)))
 
@@ -124,7 +155,8 @@ class AudioEngine:
         self.command_queue.put(("param", param_path, str(value)))
 
     def load_patch(self, patch: Patch) -> None:
-        self.command_queue.put(("patch_load", patch.name))
+        self._current_patch = patch
+        self.command_queue.put(("patch_load",))
 
     def all_notes_off(self) -> None:
         self.command_queue.put(("all_notes_off",))
@@ -132,9 +164,25 @@ class AudioEngine:
     def panic(self) -> None:
         self.command_queue.put(("panic",))
 
+    # -- Drum commands --
+
+    def trigger_drum(self, drum_type: str, velocity: int, pan: float = 0.0) -> None:
+        self.command_queue.put(("drum_trigger", drum_type, str(velocity), str(pan)))
+
+    def load_drum_kit(self, kit_name: str) -> None:
+        self.command_queue.put(("drum_load_kit", kit_name))
+
+    def set_drum_pattern(self, pattern: DrumPattern) -> None:
+        self.command_queue.put(("drum_set_pattern",))
+
+    def _set_drum_pattern_direct(self, pattern: DrumPattern) -> None:
+        """Directly set the pattern reference (called from dispatch)."""
+        self.drum_sequencer.set_pattern(pattern)
+
+    # -- Voice allocation --
+
     def _allocate_voice(self, note: int) -> int | None:
-        """Find a free voice or steal the oldest one."""
-        # First: look for a free, finished voice
+        """Find a free synth voice or steal the oldest one."""
         for i, voice in enumerate(self.voices):
             if not voice.active and voice.is_finished():
                 if note in self._note_to_voice:
@@ -143,7 +191,6 @@ class AudioEngine:
                 self._voice_ages[i] = 0
                 return i
 
-        # Second: steal the oldest active voice
         oldest_idx = 0
         oldest_age = -1
         for i, voice in enumerate(self.voices):
@@ -151,7 +198,6 @@ class AudioEngine:
                 oldest_age = self._voice_ages[i]
                 oldest_idx = i
 
-        # Remove old note mapping
         for n, v in list(self._note_to_voice.items()):
             if v == oldest_idx:
                 del self._note_to_voice[n]
@@ -161,13 +207,31 @@ class AudioEngine:
         self._voice_ages[oldest_idx] = 0
         return oldest_idx
 
+    def _allocate_drum_voice(self) -> int:
+        """Find a free drum voice or steal the oldest one."""
+        for i, voice in enumerate(self.drum_voices):
+            if not voice.active:
+                self._drum_voice_ages[i] = 0
+                return i
+
+        oldest_idx = 0
+        oldest_age = -1
+        for i in range(len(self.drum_voices)):
+            if self._drum_voice_ages[i] > oldest_age:
+                oldest_age = self._drum_voice_ages[i]
+                oldest_idx = i
+
+        self._drum_voice_ages[oldest_idx] = 0
+        return oldest_idx
+
+    # -- Command dispatch --
+
     def _dispatch(self, cmd: VoiceCommand) -> None:
         cmd_type = cmd[0]
 
         if cmd_type == "note_on":
             note = int(cmd[1])
             velocity = int(cmd[2])
-            # If note already playing, retrigger it
             if note in self._note_to_voice:
                 existing = self._note_to_voice[note]
                 self.voices[existing].note_off()
@@ -193,18 +257,58 @@ class AudioEngine:
                 if voice.active:
                     voice.note_off()
             self._note_to_voice.clear()
+            for dv in self.drum_voices:
+                dv.reset()
 
         elif cmd_type == "panic":
             for voice in self.voices:
                 voice.active = False
             self._note_to_voice.clear()
+            for dv in self.drum_voices:
+                dv.reset()
+
+        elif cmd_type == "patch_load":
+            if self._current_patch is not None:
+                for voice in self.voices:
+                    voice.load_patch(self._current_patch)
+
+        elif cmd_type == "drum_trigger":
+            drum_type = cmd[1]
+            velocity = int(cmd[2])
+            pan = float(cmd[3])
+            kit = self.current_drum_kit
+            if kit is not None:
+                params = kit.get_params(drum_type)
+                buffer = self.drum_synth.render(params, velocity / 127.0)
+                v_idx = self._allocate_drum_voice()
+                self.drum_voices[v_idx].trigger(buffer, pan)
+
+        elif cmd_type == "drum_load_kit":
+            kit_name = cmd[1]
+            kit = DRUM_KIT_PRESETS.get(kit_name)
+            if kit is not None:
+                self.current_drum_kit = kit
+                logger.info(f"Drum kit loaded: {kit_name}")
+            else:
+                logger.warning(f"Drum kit not found: {kit_name}")
+
+        elif cmd_type == "drum_set_pattern":
+            # Pattern is set externally via _set_drum_pattern_direct before enqueue
+            pass
+
+    def _trigger_drum_from_event(self, event: TriggerEvent) -> None:
+        """Trigger a drum sound directly from a TriggerEvent (called in callback)."""
+        kit = self.current_drum_kit
+        if kit is not None:
+            params = kit.get_params(event.drum_type)
+            buffer = self.drum_synth.render(params, event.velocity)
+            v_idx = self._allocate_drum_voice()
+            self.drum_voices[v_idx].trigger(buffer, event.pan)
+
+    # -- Audio callback --
 
     def _audio_callback(self, outdata: npt.NDArray[np.float32], frames: int, time_info: Any, status: int) -> None:
-        """Audio callback executed on sounddevice's high-priority thread.
-
-        Must not allocate memory, hold locks, or create Python objects
-        beyond simple tuples and floats.
-        """
+        """Audio callback executed on sounddevice's high-priority thread."""
         # Drain command queue (non-blocking)
         while True:
             try:
@@ -213,7 +317,16 @@ class AudioEngine:
             except queue.Empty:
                 break
 
-        # Render active voices
+        # Advance transport (audio clock source)
+        if self.transport.is_playing:
+            self.transport.advance(frames, self.sample_rate)
+
+        # Process drum sequencer
+        triggers = self.drum_sequencer.process()
+        for event in triggers:
+            self._trigger_drum_from_event(event)
+
+        # Render active synth voices
         mixed = np.zeros((frames, CHANNELS), dtype=np.float32)
         for i, voice in enumerate(self.voices):
             if voice.active:
@@ -223,6 +336,16 @@ class AudioEngine:
                 self._voice_ages[i] += 1
                 if voice.is_finished():
                     voice.active = False
+
+        # Render active drum voices
+        for i, dv in enumerate(self.drum_voices):
+            if dv.active:
+                block = dv.render_block(frames)
+                mixed[:, 0] += block * dv.pan_left
+                mixed[:, 1] += block * dv.pan_right
+                self._drum_voice_ages[i] += 1
+                if dv.is_finished():
+                    dv.active = False
 
         # Master effects
         mixed = self.reverb.process(mixed)
