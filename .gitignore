@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local config
+.claude/settings.local.json
+
+# Lint / Type checking cache
+.mypy_cache/
+.ruff_cache/
+
+# User data
+*.wav
+*.mid
+export/

@@ -1,0 +1,170 @@
+{
+  "name": "Tech House",
+  "description": "Driving, minimal tech house with punchy chord stabs",
+  "tempo_range": [
+    125,
+    130
+  ],
+  "time_signatures": [
+    "4/4"
+  ],
+  "scale_types": [
+    "natural_minor",
+    "phrygian"
+  ],
+  "scale_degrees": [
+    {
+      "degree": 1,
+      "qualities": [
+        "min7",
+        "min"
+      ]
+    },
+    {
+      "degree": 2,
+      "qualities": [
+        "min7"
+      ]
+    },
+    {
+      "degree": 3,
+      "qualities": [
+        "maj7",
+        "maj"
+      ]
+    },
+    {
+      "degree": 4,
+      "qualities": [
+        "min7",
+        "sus4"
+      ]
+    },
+    {
+      "degree": 5,
+      "qualities": [
+        "min7",
+        "dom7",
+        "7sus4"
+      ]
+    },
+    {
+      "degree": 6,
+      "qualities": [
+        "maj7"
+      ]
+    },
+    {
+      "degree": 7,
+      "qualities": [
+        "dom7"
+      ]
+    }
+  ],
+  "common_progressions": [
+    {
+      "degrees": [
+        1,
+        7,
+        1,
+        7
+      ],
+      "weight": 10,
+      "name": "Dark Tech"
+    },
+    {
+      "degrees": [
+        1,
+        4,
+        1,
+        4
+      ],
+      "weight": 8,
+      "name": "Minimal Bounce"
+    },
+    {
+      "degrees": [
+        1,
+        6,
+        7,
+        1
+      ],
+      "weight": 6,
+      "name": "Phrygian Drive"
+    },
+    {
+      "degrees": [
+        1,
+        5,
+        4,
+        5
+      ],
+      "weight": 5,
+      "name": "Tribal"
+    }
+  ],
+  "rhythm_patterns": [
+    {
+      "name": "stabs",
+      "durations": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accents": [
+        1.0,
+        0.0,
+        0.0,
+        0.7,
+        0.8,
+        0.0,
+        0.0,
+        0.5
+      ]
+    },
+    {
+      "name": "sparse",
+      "durations": [
+        4.0,
+        4.0
+      ],
+      "accents": [
+        1.0,
+        0.9
+      ]
+    }
+  ],
+  "voicing": {
+    "preferred_inversions": [
+      "root"
+    ],
+    "voice_range": [
+      48,
+      78
+    ],
+    "voice_count": 3,
+    "spread": "close",
+    "doubling_rules": [
+      "prefer_double_root"
+    ]
+  },
+  "feel": {
+    "swing": 0.02,
+    "velocity_variation": 0.04,
+    "timing_humanize": 0.002
+  },
+  "drum_patterns": {
+    "kick": "4/4",
+    "snare": "",
+    "hh_closed": "sparse",
+    "hh_open": "",
+    "clap": "2_4",
+    "crash": ""
+  },
+  "suggested_drum_kit": "909 House"
+}

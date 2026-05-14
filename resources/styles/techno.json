@@ -1,0 +1,156 @@
+{
+  "name": "Techno",
+  "description": "Dark, industrial techno with hypnotic minimal chord movement",
+  "tempo_range": [
+    128,
+    135
+  ],
+  "time_signatures": [
+    "4/4"
+  ],
+  "scale_types": [
+    "phrygian",
+    "locrian"
+  ],
+  "scale_degrees": [
+    {
+      "degree": 1,
+      "qualities": [
+        "min",
+        "min7"
+      ]
+    },
+    {
+      "degree": 2,
+      "qualities": [
+        "dim",
+        "m7b5"
+      ]
+    },
+    {
+      "degree": 3,
+      "qualities": [
+        "maj",
+        "dom7"
+      ]
+    },
+    {
+      "degree": 4,
+      "qualities": [
+        "min",
+        "sus4"
+      ]
+    },
+    {
+      "degree": 5,
+      "qualities": [
+        "dim",
+        "min"
+      ]
+    },
+    {
+      "degree": 6,
+      "qualities": [
+        "maj",
+        "maj7"
+      ]
+    },
+    {
+      "degree": 7,
+      "qualities": [
+        "min",
+        "dom7"
+      ]
+    }
+  ],
+  "common_progressions": [
+    {
+      "degrees": [
+        1,
+        6,
+        1,
+        6
+      ],
+      "weight": 15,
+      "name": "Hypnotic Techno"
+    },
+    {
+      "degrees": [
+        1,
+        7,
+        1,
+        7
+      ],
+      "weight": 12,
+      "name": "Dark Industrial"
+    },
+    {
+      "degrees": [
+        1,
+        4,
+        7,
+        6
+      ],
+      "weight": 8,
+      "name": "Phrygian Tension"
+    },
+    {
+      "degrees": [
+        1
+      ],
+      "weight": 10,
+      "name": "Single Chord Drone"
+    }
+  ],
+  "rhythm_patterns": [
+    {
+      "name": "drone",
+      "durations": [
+        16.0
+      ],
+      "accents": [
+        1.0
+      ]
+    },
+    {
+      "name": "two_chord",
+      "durations": [
+        8.0,
+        8.0
+      ],
+      "accents": [
+        1.0,
+        0.95
+      ]
+    }
+  ],
+  "voicing": {
+    "preferred_inversions": [
+      "root"
+    ],
+    "voice_range": [
+      36,
+      72
+    ],
+    "voice_count": 3,
+    "spread": "close",
+    "doubling_rules": [
+      "double_root",
+      "double_fifth"
+    ]
+  },
+  "feel": {
+    "swing": 0.01,
+    "velocity_variation": 0.03,
+    "timing_humanize": 0.002
+  },
+  "drum_patterns": {
+    "kick": "continuous",
+    "snare": "sparse",
+    "hh_closed": "sparse",
+    "hh_open": "",
+    "clap": "",
+    "crash": ""
+  },
+  "suggested_drum_kit": "909 House"
+}

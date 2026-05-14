@@ -1,0 +1,190 @@
+{
+  "name": "Future Bass",
+  "description": "Bright, emotional future bass with lush major 7th/9th chords",
+  "tempo_range": [
+    140,
+    155
+  ],
+  "time_signatures": [
+    "4/4"
+  ],
+  "scale_types": [
+    "major",
+    "lydian"
+  ],
+  "scale_degrees": [
+    {
+      "degree": 1,
+      "qualities": [
+        "maj7",
+        "maj9",
+        "add9"
+      ]
+    },
+    {
+      "degree": 2,
+      "qualities": [
+        "min7",
+        "min9"
+      ]
+    },
+    {
+      "degree": 3,
+      "qualities": [
+        "min7",
+        "min9"
+      ]
+    },
+    {
+      "degree": 4,
+      "qualities": [
+        "maj7",
+        "maj7#11",
+        "maj9"
+      ]
+    },
+    {
+      "degree": 5,
+      "qualities": [
+        "dom7",
+        "dom9",
+        "7sus4"
+      ]
+    },
+    {
+      "degree": 6,
+      "qualities": [
+        "min7",
+        "min9",
+        "min11"
+      ]
+    },
+    {
+      "degree": 7,
+      "qualities": [
+        "m7b5",
+        "dim7"
+      ]
+    }
+  ],
+  "common_progressions": [
+    {
+      "degrees": [
+        1,
+        5,
+        6,
+        4
+      ],
+      "weight": 15,
+      "name": "Future Classic"
+    },
+    {
+      "degrees": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "weight": 12,
+      "name": "Lydian Shine"
+    },
+    {
+      "degrees": [
+        6,
+        4,
+        1,
+        5
+      ],
+      "weight": 10,
+      "name": "Bright Cascade"
+    },
+    {
+      "degrees": [
+        1,
+        4,
+        6,
+        5
+      ],
+      "weight": 8,
+      "name": "Chill Wave"
+    },
+    {
+      "degrees": [
+        4,
+        3,
+        6,
+        5
+      ],
+      "weight": 6,
+      "name": "Dream Pop"
+    }
+  ],
+  "rhythm_patterns": [
+    {
+      "name": "chopped",
+      "durations": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accents": [
+        1.0,
+        0.5,
+        0.7,
+        0.5,
+        0.9,
+        0.5,
+        0.7,
+        0.5
+      ]
+    },
+    {
+      "name": "two_bar",
+      "durations": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "accents": [
+        1.0,
+        0.85,
+        0.9,
+        0.85
+      ]
+    }
+  ],
+  "voicing": {
+    "preferred_inversions": [
+      "root",
+      "first",
+      "second"
+    ],
+    "voice_range": [
+      52,
+      100
+    ],
+    "voice_count": 5,
+    "spread": "open",
+    "doubling_rules": []
+  },
+  "feel": {
+    "swing": 0.1,
+    "velocity_variation": 0.12,
+    "timing_humanize": 0.01
+  },
+  "drum_patterns": {
+    "kick": "half_time",
+    "snare": "offbeat",
+    "hh_closed": "fast_8th",
+    "hh_open": "fill",
+    "clap": "offbeat",
+    "crash": ""
+  },
+  "suggested_drum_kit": "808 Classic"
+}

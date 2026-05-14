@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(pip:*)",
+      "Bash(black:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(pytest:*)",
+      "Bash(git:*)",
+      "Read(D:\\编程\\2 fantastic chord/**)",
+      "Glob",
+      "Grep"
+    ],
+    "deny": [
+      "Bash(pip install:*)",
+      "Bash(pip uninstall:*)"
+    ]
+  },
+  "hooks": {
+    "PreCommit": [
+      {
+        "matcher": "*.py",
+        "command": "black --line-length 120 --check --diff \"{files}\"",
+        "label": "black-check"
+      },
+      {
+        "matcher": "*.py",
+        "command": "ruff check \"{files}\"",
+        "label": "ruff-lint"
+      }
+    ]
+  },
+  "env": {
+    "PYTHONPATH": "D:/编程/2 fantastic chord/src",
+    "PYTHONUNBUFFERED": "1"
+  }
+}

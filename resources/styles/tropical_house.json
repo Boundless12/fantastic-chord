@@ -1,0 +1,173 @@
+{
+  "name": "Tropical House",
+  "description": "Light, breezy tropical house with bright major 7th chords",
+  "tempo_range": [
+    105,
+    115
+  ],
+  "time_signatures": [
+    "4/4"
+  ],
+  "scale_types": [
+    "major",
+    "mixolydian"
+  ],
+  "scale_degrees": [
+    {
+      "degree": 1,
+      "qualities": [
+        "maj7",
+        "maj9",
+        "add9"
+      ]
+    },
+    {
+      "degree": 2,
+      "qualities": [
+        "min7",
+        "min9"
+      ]
+    },
+    {
+      "degree": 3,
+      "qualities": [
+        "min7"
+      ]
+    },
+    {
+      "degree": 4,
+      "qualities": [
+        "maj7",
+        "maj7sus2"
+      ]
+    },
+    {
+      "degree": 5,
+      "qualities": [
+        "dom7",
+        "dom9"
+      ]
+    },
+    {
+      "degree": 6,
+      "qualities": [
+        "min7",
+        "min9"
+      ]
+    },
+    {
+      "degree": 7,
+      "qualities": [
+        "m7b5",
+        "dim7"
+      ]
+    }
+  ],
+  "common_progressions": [
+    {
+      "degrees": [
+        1,
+        4,
+        6,
+        5
+      ],
+      "weight": 12,
+      "name": "Island Breeze"
+    },
+    {
+      "degrees": [
+        1,
+        5,
+        6,
+        4
+      ],
+      "weight": 10,
+      "name": "Summer Pop"
+    },
+    {
+      "degrees": [
+        4,
+        1,
+        5,
+        6
+      ],
+      "weight": 8,
+      "name": "Beach Sunset"
+    },
+    {
+      "degrees": [
+        6,
+        4,
+        1,
+        5
+      ],
+      "weight": 7,
+      "name": "Chill Trop"
+    },
+    {
+      "degrees": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "weight": 5,
+      "name": "Happy Climb"
+    }
+  ],
+  "rhythm_patterns": [
+    {
+      "name": "breezy",
+      "durations": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "accents": [
+        1.0,
+        0.8,
+        0.9,
+        0.8
+      ]
+    },
+    {
+      "name": "laid_back",
+      "durations": [
+        4.0,
+        4.0
+      ],
+      "accents": [
+        1.0,
+        0.9
+      ]
+    }
+  ],
+  "voicing": {
+    "preferred_inversions": [
+      "root",
+      "first"
+    ],
+    "voice_range": [
+      52,
+      88
+    ],
+    "voice_count": 4,
+    "spread": "close",
+    "doubling_rules": []
+  },
+  "feel": {
+    "swing": 0.12,
+    "velocity_variation": 0.07,
+    "timing_humanize": 0.008
+  },
+  "drum_patterns": {
+    "kick": "4/4",
+    "snare": "",
+    "hh_closed": "offbeat",
+    "hh_open": "fill",
+    "clap": "2_4",
+    "crash": ""
+  },
+  "suggested_drum_kit": "909 House"
+}

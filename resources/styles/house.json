@@ -1,0 +1,174 @@
+{
+  "name": "House",
+  "description": "Classic four-on-the-floor house with soulful chord progressions",
+  "tempo_range": [
+    120,
+    130
+  ],
+  "time_signatures": [
+    "4/4"
+  ],
+  "scale_types": [
+    "major",
+    "dorian"
+  ],
+  "scale_degrees": [
+    {
+      "degree": 1,
+      "qualities": [
+        "maj7",
+        "maj9",
+        "maj7sus2"
+      ]
+    },
+    {
+      "degree": 2,
+      "qualities": [
+        "min7",
+        "min9"
+      ]
+    },
+    {
+      "degree": 3,
+      "qualities": [
+        "min7"
+      ]
+    },
+    {
+      "degree": 4,
+      "qualities": [
+        "maj7",
+        "maj7#11"
+      ]
+    },
+    {
+      "degree": 5,
+      "qualities": [
+        "dom7",
+        "dom9"
+      ]
+    },
+    {
+      "degree": 6,
+      "qualities": [
+        "min7",
+        "min9",
+        "min11"
+      ]
+    },
+    {
+      "degree": 7,
+      "qualities": [
+        "m7b5"
+      ]
+    }
+  ],
+  "common_progressions": [
+    {
+      "degrees": [
+        2,
+        5,
+        1
+      ],
+      "weight": 10,
+      "name": "Jazz House ii-V-I"
+    },
+    {
+      "degrees": [
+        1,
+        6,
+        2,
+        5
+      ],
+      "weight": 8,
+      "name": "Soulful Turnaround"
+    },
+    {
+      "degrees": [
+        1,
+        5,
+        6,
+        4
+      ],
+      "weight": 6,
+      "name": "Pop House"
+    },
+    {
+      "degrees": [
+        4,
+        3,
+        2,
+        1
+      ],
+      "weight": 5,
+      "name": "Plagal Walkdown"
+    },
+    {
+      "degrees": [
+        1,
+        4,
+        5,
+        4
+      ],
+      "weight": 4,
+      "name": "Classic House Loop"
+    }
+  ],
+  "rhythm_patterns": [
+    {
+      "name": "four_on_floor",
+      "durations": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "accents": [
+        1.0,
+        0.8,
+        0.9,
+        0.8
+      ]
+    },
+    {
+      "name": "half_bar",
+      "durations": [
+        2.0,
+        2.0
+      ],
+      "accents": [
+        1.0,
+        0.9
+      ]
+    }
+  ],
+  "voicing": {
+    "preferred_inversions": [
+      "root",
+      "first"
+    ],
+    "voice_range": [
+      48,
+      84
+    ],
+    "voice_count": 4,
+    "spread": "close",
+    "doubling_rules": [
+      "avoid_third_doubling"
+    ]
+  },
+  "feel": {
+    "swing": 0.05,
+    "velocity_variation": 0.08,
+    "timing_humanize": 0.008
+  },
+  "drum_patterns": {
+    "kick": "4/4",
+    "snare": "",
+    "hh_closed": "offbeat",
+    "hh_open": "fill",
+    "clap": "2_4",
+    "crash": ""
+  },
+  "suggested_drum_kit": "909 House"
+}

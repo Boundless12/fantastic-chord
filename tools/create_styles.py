@@ -1,0 +1,293 @@
+"""Generate all 10 EDM style JSON files."""
+import json
+import os
+
+BASE = "D:/编程/2 fantastic chord/resources/styles"
+os.makedirs(BASE, exist_ok=True)
+
+STYLES = {
+    "house": {
+        "name": "House", "description": "Classic four-on-the-floor house with soulful chord progressions",
+        "tempo_range": [120, 130], "time_signatures": ["4/4"], "scale_types": ["major", "dorian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["maj7", "maj9", "maj7sus2"]},
+            {"degree": 2, "qualities": ["min7", "min9"]},
+            {"degree": 3, "qualities": ["min7"]},
+            {"degree": 4, "qualities": ["maj7", "maj7#11"]},
+            {"degree": 5, "qualities": ["dom7", "dom9"]},
+            {"degree": 6, "qualities": ["min7", "min9", "min11"]},
+            {"degree": 7, "qualities": ["m7b5"]},
+        ],
+        "common_progressions": [
+            {"degrees": [2, 5, 1], "weight": 10, "name": "Jazz House ii-V-I"},
+            {"degrees": [1, 6, 2, 5], "weight": 8, "name": "Soulful Turnaround"},
+            {"degrees": [1, 5, 6, 4], "weight": 6, "name": "Pop House"},
+            {"degrees": [4, 3, 2, 1], "weight": 5, "name": "Plagal Walkdown"},
+            {"degrees": [1, 4, 5, 4], "weight": 4, "name": "Classic House Loop"},
+        ],
+        "rhythm_patterns": [
+            {"name": "four_on_floor", "durations": [1.0, 1.0, 1.0, 1.0], "accents": [1.0, 0.8, 0.9, 0.8]},
+            {"name": "half_bar", "durations": [2.0, 2.0], "accents": [1.0, 0.9]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first"], "voice_range": [48, 84], "voice_count": 4, "spread": "close", "doubling_rules": ["avoid_third_doubling"]},
+        "feel": {"swing": 0.05, "velocity_variation": 0.08, "timing_humanize": 0.008},
+        "drum_patterns": {"kick": "4/4", "snare": "", "hh_closed": "offbeat", "hh_open": "fill", "clap": "2_4", "crash": ""},
+        "suggested_drum_kit": "909 House",
+    },
+    "deep_house": {
+        "name": "Deep House", "description": "Warm, jazzy deep house with lush extended chords",
+        "tempo_range": [115, 125], "time_signatures": ["4/4"], "scale_types": ["natural_minor", "dorian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["min9", "min11"]},
+            {"degree": 2, "qualities": ["min7", "min9"]},
+            {"degree": 3, "qualities": ["maj7", "maj9", "maj7#11"]},
+            {"degree": 4, "qualities": ["min7", "min9"]},
+            {"degree": 5, "qualities": ["min7", "dom7", "7sus4"]},
+            {"degree": 6, "qualities": ["maj7", "maj9"]},
+            {"degree": 7, "qualities": ["dom7", "7sus4"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 6, 4, 5], "weight": 10, "name": "Deep Soul"},
+            {"degrees": [2, 5, 1, 1], "weight": 8, "name": "Jazzy Turnaround"},
+            {"degrees": [1, 4, 1, 5], "weight": 6, "name": "Warm Loop"},
+            {"degrees": [6, 5, 1, 4], "weight": 7, "name": "Emotional"},
+            {"degrees": [1, 3, 4, 5], "weight": 5, "name": "Climbing"},
+        ],
+        "rhythm_patterns": [
+            {"name": "long_chords", "durations": [4.0, 4.0, 4.0, 4.0], "accents": [1.0, 0.85, 0.9, 0.85]},
+            {"name": "two_bar", "durations": [2.0, 2.0, 2.0, 2.0], "accents": [1.0, 0.9, 0.85, 0.9]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first", "second"], "voice_range": [48, 84], "voice_count": 5, "spread": "open", "doubling_rules": []},
+        "feel": {"swing": 0.08, "velocity_variation": 0.06, "timing_humanize": 0.006},
+        "drum_patterns": {"kick": "4/4", "snare": "", "hh_closed": "swing", "hh_open": "sparse", "clap": "2_4", "crash": ""},
+        "suggested_drum_kit": "909 House",
+    },
+    "tech_house": {
+        "name": "Tech House", "description": "Driving, minimal tech house with punchy chord stabs",
+        "tempo_range": [125, 130], "time_signatures": ["4/4"], "scale_types": ["natural_minor", "phrygian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["min7", "min"]},
+            {"degree": 2, "qualities": ["min7"]},
+            {"degree": 3, "qualities": ["maj7", "maj"]},
+            {"degree": 4, "qualities": ["min7", "sus4"]},
+            {"degree": 5, "qualities": ["min7", "dom7", "7sus4"]},
+            {"degree": 6, "qualities": ["maj7"]},
+            {"degree": 7, "qualities": ["dom7"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 7, 1, 7], "weight": 10, "name": "Dark Tech"},
+            {"degrees": [1, 4, 1, 4], "weight": 8, "name": "Minimal Bounce"},
+            {"degrees": [1, 6, 7, 1], "weight": 6, "name": "Phrygian Drive"},
+            {"degrees": [1, 5, 4, 5], "weight": 5, "name": "Tribal"},
+        ],
+        "rhythm_patterns": [
+            {"name": "stabs", "durations": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "accents": [1.0, 0.0, 0.0, 0.7, 0.8, 0.0, 0.0, 0.5]},
+            {"name": "sparse", "durations": [4.0, 4.0], "accents": [1.0, 0.9]},
+        ],
+        "voicing": {"preferred_inversions": ["root"], "voice_range": [48, 78], "voice_count": 3, "spread": "close", "doubling_rules": ["prefer_double_root"]},
+        "feel": {"swing": 0.02, "velocity_variation": 0.04, "timing_humanize": 0.002},
+        "drum_patterns": {"kick": "4/4", "snare": "", "hh_closed": "sparse", "hh_open": "", "clap": "2_4", "crash": ""},
+        "suggested_drum_kit": "909 House",
+    },
+    "trance": {
+        "name": "Trance", "description": "Euphoric trance with emotional minor progressions",
+        "tempo_range": [130, 140], "time_signatures": ["4/4"], "scale_types": ["natural_minor", "harmonic_minor"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["min7", "min9", "min7sus2"]},
+            {"degree": 2, "qualities": ["m7b5"]},
+            {"degree": 3, "qualities": ["maj7", "maj7sus2"]},
+            {"degree": 4, "qualities": ["min7", "min9"]},
+            {"degree": 5, "qualities": ["min7", "7sus4"]},
+            {"degree": 6, "qualities": ["maj7", "maj7#11"]},
+            {"degree": 7, "qualities": ["dom7", "7sus4", "maj7"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 7, 6, 7], "weight": 15, "name": "Classic Trance Lift"},
+            {"degrees": [6, 7, 1], "weight": 12, "name": "ASOT Cadence"},
+            {"degrees": [1, 6, 7], "weight": 8, "name": "Alternative"},
+            {"degrees": [1, 3, 7, 6], "weight": 8, "name": "Epic Cycle"},
+            {"degrees": [1, 5, 6, 4], "weight": 5, "name": "Pop Trance"},
+        ],
+        "rhythm_patterns": [
+            {"name": "long_pads", "durations": [8.0, 8.0], "accents": [1.0, 0.9]},
+            {"name": "two_bar", "durations": [4.0, 4.0, 4.0, 4.0], "accents": [1.0, 0.85, 0.9, 0.85]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first", "second"], "voice_range": [48, 96], "voice_count": 5, "spread": "open", "doubling_rules": ["prefer_double_root"]},
+        "feel": {"swing": 0.0, "velocity_variation": 0.05, "timing_humanize": 0.004},
+        "drum_patterns": {"kick": "4/4_rolling", "snare": "", "hh_open": "continuous", "hh_closed": "", "clap": "2_4", "crash": "downbeat"},
+        "suggested_drum_kit": "EDM Punchy",
+    },
+    "uplifting_trance": {
+        "name": "Uplifting Trance", "description": "Anthemic, emotional uplifting trance with bright major chords",
+        "tempo_range": [136, 140], "time_signatures": ["4/4"], "scale_types": ["major", "mixolydian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["maj7", "maj9", "maj7sus2"]},
+            {"degree": 2, "qualities": ["min7", "min9"]},
+            {"degree": 3, "qualities": ["min7"]},
+            {"degree": 4, "qualities": ["maj7", "maj7#11"]},
+            {"degree": 5, "qualities": ["dom7", "dom9", "7sus4"]},
+            {"degree": 6, "qualities": ["min7", "min9"]},
+            {"degree": 7, "qualities": ["m7b5"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 5, 6, 4], "weight": 12, "name": "Euphoric Rise"},
+            {"degrees": [4, 5, 1], "weight": 10, "name": "Plagal Anthem"},
+            {"degrees": [1, 3, 4, 5], "weight": 8, "name": "Climbing Major"},
+            {"degrees": [6, 4, 1, 5], "weight": 7, "name": "Emotional"},
+            {"degrees": [1, 6, 4, 5], "weight": 6, "name": "Classic Uplift"},
+        ],
+        "rhythm_patterns": [
+            {"name": "epic_pads", "durations": [8.0, 8.0], "accents": [1.0, 0.95]},
+            {"name": "build", "durations": [2.0, 2.0, 2.0, 2.0], "accents": [0.8, 0.85, 0.9, 1.0]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first"], "voice_range": [52, 96], "voice_count": 5, "spread": "open", "doubling_rules": []},
+        "feel": {"swing": 0.0, "velocity_variation": 0.04, "timing_humanize": 0.003},
+        "drum_patterns": {"kick": "4/4_rolling", "snare": "build", "hh_open": "continuous", "hh_closed": "", "clap": "2_4", "crash": "downbeat"},
+        "suggested_drum_kit": "EDM Punchy",
+    },
+    "techno": {
+        "name": "Techno", "description": "Dark, industrial techno with hypnotic minimal chord movement",
+        "tempo_range": [128, 135], "time_signatures": ["4/4"], "scale_types": ["phrygian", "locrian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["min", "min7"]},
+            {"degree": 2, "qualities": ["dim", "m7b5"]},
+            {"degree": 3, "qualities": ["maj", "dom7"]},
+            {"degree": 4, "qualities": ["min", "sus4"]},
+            {"degree": 5, "qualities": ["dim", "min"]},
+            {"degree": 6, "qualities": ["maj", "maj7"]},
+            {"degree": 7, "qualities": ["min", "dom7"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 6, 1, 6], "weight": 15, "name": "Hypnotic Techno"},
+            {"degrees": [1, 7, 1, 7], "weight": 12, "name": "Dark Industrial"},
+            {"degrees": [1, 4, 7, 6], "weight": 8, "name": "Phrygian Tension"},
+            {"degrees": [1], "weight": 10, "name": "Single Chord Drone"},
+        ],
+        "rhythm_patterns": [
+            {"name": "drone", "durations": [16.0], "accents": [1.0]},
+            {"name": "two_chord", "durations": [8.0, 8.0], "accents": [1.0, 0.95]},
+        ],
+        "voicing": {"preferred_inversions": ["root"], "voice_range": [36, 72], "voice_count": 3, "spread": "close", "doubling_rules": ["double_root", "double_fifth"]},
+        "feel": {"swing": 0.01, "velocity_variation": 0.03, "timing_humanize": 0.002},
+        "drum_patterns": {"kick": "continuous", "snare": "sparse", "hh_closed": "sparse", "hh_open": "", "clap": "", "crash": ""},
+        "suggested_drum_kit": "909 House",
+    },
+    "dubstep": {
+        "name": "Dubstep", "description": "Aggressive, dark dubstep with half-time minor progressions",
+        "tempo_range": [138, 145], "time_signatures": ["4/4"], "scale_types": ["natural_minor", "phrygian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["min", "min7"]},
+            {"degree": 2, "qualities": ["dim", "m7b5"]},
+            {"degree": 3, "qualities": ["maj7", "maj"]},
+            {"degree": 4, "qualities": ["min", "min7"]},
+            {"degree": 5, "qualities": ["min", "dim"]},
+            {"degree": 6, "qualities": ["maj", "maj7"]},
+            {"degree": 7, "qualities": ["dom7", "maj"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 6, 1, 6], "weight": 12, "name": "Dark Wobble"},
+            {"degrees": [1, 3, 7], "weight": 10, "name": "Phrygian Drop"},
+            {"degrees": [1, 6, 7], "weight": 8, "name": "Half-time Heavy"},
+            {"degrees": [1, 4, 6, 7], "weight": 6, "name": "Cinematic Dub"},
+        ],
+        "rhythm_patterns": [
+            {"name": "half_time", "durations": [4.0, 4.0, 4.0, 4.0], "accents": [1.0, 0.8, 0.9, 0.8]},
+            {"name": "drop", "durations": [2.0, 2.0, 2.0, 2.0], "accents": [1.0, 0.7, 0.9, 0.7]},
+        ],
+        "voicing": {"preferred_inversions": ["root"], "voice_range": [36, 72], "voice_count": 3, "spread": "close", "doubling_rules": ["double_root"]},
+        "feel": {"swing": 0.15, "velocity_variation": 0.1, "timing_humanize": 0.005},
+        "drum_patterns": {"kick": "half_time", "snare": "half_time_3", "hh_closed": "fast_8th", "hh_open": "", "clap": "", "crash": "downbeat"},
+        "suggested_drum_kit": "808 Classic",
+    },
+    "future_bass": {
+        "name": "Future Bass", "description": "Bright, emotional future bass with lush major 7th/9th chords",
+        "tempo_range": [140, 155], "time_signatures": ["4/4"], "scale_types": ["major", "lydian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["maj7", "maj9", "add9"]},
+            {"degree": 2, "qualities": ["min7", "min9"]},
+            {"degree": 3, "qualities": ["min7", "min9"]},
+            {"degree": 4, "qualities": ["maj7", "maj7#11", "maj9"]},
+            {"degree": 5, "qualities": ["dom7", "dom9", "7sus4"]},
+            {"degree": 6, "qualities": ["min7", "min9", "min11"]},
+            {"degree": 7, "qualities": ["m7b5", "dim7"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 5, 6, 4], "weight": 15, "name": "Future Classic"},
+            {"degrees": [1, 3, 4, 5], "weight": 12, "name": "Lydian Shine"},
+            {"degrees": [6, 4, 1, 5], "weight": 10, "name": "Bright Cascade"},
+            {"degrees": [1, 4, 6, 5], "weight": 8, "name": "Chill Wave"},
+            {"degrees": [4, 3, 6, 5], "weight": 6, "name": "Dream Pop"},
+        ],
+        "rhythm_patterns": [
+            {"name": "chopped", "durations": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "accents": [1.0, 0.5, 0.7, 0.5, 0.9, 0.5, 0.7, 0.5]},
+            {"name": "two_bar", "durations": [2.0, 2.0, 2.0, 2.0], "accents": [1.0, 0.85, 0.9, 0.85]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first", "second"], "voice_range": [52, 100], "voice_count": 5, "spread": "open", "doubling_rules": []},
+        "feel": {"swing": 0.1, "velocity_variation": 0.12, "timing_humanize": 0.01},
+        "drum_patterns": {"kick": "half_time", "snare": "offbeat", "hh_closed": "fast_8th", "hh_open": "fill", "clap": "offbeat", "crash": ""},
+        "suggested_drum_kit": "808 Classic",
+    },
+    "progressive_house": {
+        "name": "Progressive House", "description": "Evolving, melodic progressive house with emotional progressions",
+        "tempo_range": [122, 128], "time_signatures": ["4/4"], "scale_types": ["natural_minor", "dorian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["min7", "min9"]},
+            {"degree": 2, "qualities": ["min7"]},
+            {"degree": 3, "qualities": ["maj7", "maj9"]},
+            {"degree": 4, "qualities": ["min7", "maj7"]},
+            {"degree": 5, "qualities": ["min7", "7sus4"]},
+            {"degree": 6, "qualities": ["maj7", "maj7#11"]},
+            {"degree": 7, "qualities": ["dom7", "7sus4"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 6, 3, 7], "weight": 15, "name": "Deadmau5 Classic"},
+            {"degrees": [1, 4, 6, 5], "weight": 10, "name": "Prog Lift"},
+            {"degrees": [6, 5, 1, 4], "weight": 8, "name": "Emotional Build"},
+            {"degrees": [1, 3, 5, 4], "weight": 7, "name": "Evolving"},
+        ],
+        "rhythm_patterns": [
+            {"name": "long_phrases", "durations": [4.0, 4.0, 4.0, 4.0], "accents": [0.85, 0.9, 0.95, 1.0]},
+            {"name": "build_up", "durations": [2.0, 2.0, 2.0, 2.0], "accents": [0.7, 0.8, 0.9, 1.0]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first"], "voice_range": [48, 90], "voice_count": 4, "spread": "open", "doubling_rules": ["prefer_double_root"]},
+        "feel": {"swing": 0.03, "velocity_variation": 0.06, "timing_humanize": 0.005},
+        "drum_patterns": {"kick": "4/4", "snare": "", "hh_closed": "offbeat", "hh_open": "sparse", "clap": "2_4", "crash": "sparse"},
+        "suggested_drum_kit": "EDM Punchy",
+    },
+    "tropical_house": {
+        "name": "Tropical House", "description": "Light, breezy tropical house with bright major 7th chords",
+        "tempo_range": [105, 115], "time_signatures": ["4/4"], "scale_types": ["major", "mixolydian"],
+        "scale_degrees": [
+            {"degree": 1, "qualities": ["maj7", "maj9", "add9"]},
+            {"degree": 2, "qualities": ["min7", "min9"]},
+            {"degree": 3, "qualities": ["min7"]},
+            {"degree": 4, "qualities": ["maj7", "maj7sus2"]},
+            {"degree": 5, "qualities": ["dom7", "dom9"]},
+            {"degree": 6, "qualities": ["min7", "min9"]},
+            {"degree": 7, "qualities": ["m7b5", "dim7"]},
+        ],
+        "common_progressions": [
+            {"degrees": [1, 4, 6, 5], "weight": 12, "name": "Island Breeze"},
+            {"degrees": [1, 5, 6, 4], "weight": 10, "name": "Summer Pop"},
+            {"degrees": [4, 1, 5, 6], "weight": 8, "name": "Beach Sunset"},
+            {"degrees": [6, 4, 1, 5], "weight": 7, "name": "Chill Trop"},
+            {"degrees": [1, 3, 4, 5], "weight": 5, "name": "Happy Climb"},
+        ],
+        "rhythm_patterns": [
+            {"name": "breezy", "durations": [2.0, 2.0, 2.0, 2.0], "accents": [1.0, 0.8, 0.9, 0.8]},
+            {"name": "laid_back", "durations": [4.0, 4.0], "accents": [1.0, 0.9]},
+        ],
+        "voicing": {"preferred_inversions": ["root", "first"], "voice_range": [52, 88], "voice_count": 4, "spread": "close", "doubling_rules": []},
+        "feel": {"swing": 0.12, "velocity_variation": 0.07, "timing_humanize": 0.008},
+        "drum_patterns": {"kick": "4/4", "snare": "", "hh_closed": "offbeat", "hh_open": "fill", "clap": "2_4", "crash": ""},
+        "suggested_drum_kit": "909 House",
+    },
+}
+
+for slug, data in STYLES.items():
+    path = os.path.join(BASE, f"{slug}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print(f"  Created: {slug}.json")
+
+print(f"All {len(STYLES)} EDM style files created!")
