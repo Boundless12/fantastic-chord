@@ -1,4 +1,6 @@
 """ADSR and DAHDSR envelope generators.
+from __future__ import annotations
+
 
 State machines that produce per-sample envelope amplitude values.
 """

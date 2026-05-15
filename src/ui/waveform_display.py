@@ -1,5 +1,7 @@
 """WaveformDisplay: Real-time oscilloscope visualization."""
 
+from __future__ import annotations
+
 from collections import deque
 
 from PySide6.QtCore import QTimer
@@ -25,7 +27,7 @@ class WaveformDisplay(QWidget):
         self._timer.start(33)
         self.setMinimumHeight(80)
 
-    def push_samples(self, data: "list[float] | None" = None) -> None:
+    def push_samples(self, data: list[float] | None = None) -> None:
         if data is None:
             data = [0.0] * 32
         for sample in data:

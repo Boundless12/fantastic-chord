@@ -1,16 +1,28 @@
-"""酷和弦 - EDM Chord Synthesizer.
+"""酷和弦 — EDM Chord Synthesizer.
 
 Entry point for the Cool Chord desktop synthesizer application.
 """
 
+from __future__ import annotations
+
 import logging
+import os
 import sys
+
+
+def _setup_path() -> None:
+    """Ensure the project root is on sys.path for 'src.*' imports."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> int:
     """Application entry point."""
+    _setup_path()
     logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     logger.info("Starting 酷和弦 (Cool Chord)...")
 

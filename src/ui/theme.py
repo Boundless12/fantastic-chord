@@ -1,5 +1,7 @@
 """UI theme constants and dark theme application."""
 
+from __future__ import annotations
+
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 

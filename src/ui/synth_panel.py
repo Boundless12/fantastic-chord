@@ -509,7 +509,6 @@ class SynthPanel(QWidget):
             v = self._knob_val(path, 0.0)
             return max(0, min(n, int(v * n + 0.5)))
 
-
         # OSC1
         patch.osc1.waveform = wf_osc[_map_int("osc1.waveform_int", 4)]
         patch.osc1.octave = int(self._knob_val("osc1.octave", 0))

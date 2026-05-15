@@ -1,5 +1,7 @@
 """Transport: Playback transport state machine."""
 
+from __future__ import annotations
+
 
 class Transport:
     """Playback transport with BPM, position, and loop support."""

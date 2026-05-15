@@ -48,6 +48,10 @@ ignore_missing_imports = true
 module = "music21"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "soundfile"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

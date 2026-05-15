@@ -1,4 +1,6 @@
 """Oscillator types for the synthesizer engine.
+from __future__ import annotations
+
 
 All oscillators generate mono float32 numpy arrays in range [-1.0, 1.0].
 """

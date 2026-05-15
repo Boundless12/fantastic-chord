@@ -1,5 +1,7 @@
 """MIDI event dataclasses for real-time and file-based MIDI messaging."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import IntEnum, auto
 

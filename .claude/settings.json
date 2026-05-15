@@ -41,22 +41,8 @@
       "Bash(del /f:*)"
     ]
   },
-  "hooks": {
-    "PreCommit": [
-      {
-        "matcher": "*.py",
-        "command": "black --line-length 120 --check --diff \"{files}\"",
-        "label": "black-check"
-      },
-      {
-        "matcher": "*.py",
-        "command": "ruff check \"{files}\"",
-        "label": "ruff-lint"
-      }
-    ]
-  },
-  "env": {
-    "PYTHONPATH": "D:/编程/2 fantastic chord/src",
+"env": {
+    "PYTHONPATH": "D:/编程/2 fantastic chord",
     "PYTHONUNBUFFERED": "1"
   }
 }

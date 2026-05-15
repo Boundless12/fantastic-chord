@@ -1,5 +1,7 @@
 """KeyboardWidget: Virtual piano keyboard with click-to-play and MIDI visualization."""
 
+from __future__ import annotations
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget

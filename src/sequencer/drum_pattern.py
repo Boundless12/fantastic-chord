@@ -1,5 +1,7 @@
 """Drum pattern data model with step-sequencer grid and GM drum map."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from .pattern import Note, Pattern
@@ -43,6 +45,32 @@ DRUM_TYPES: list[str] = [
     "tom_low",
     "rim",
 ]
+
+DRUM_COLORS: dict[str, str] = {
+    "kick": "#ff6b6b",
+    "snare": "#4d96ff",
+    "hh_closed": "#ffd93d",
+    "hh_open": "#ff922b",
+    "clap": "#6bcb77",
+    "crash": "#4ecdc4",
+    "tom_high": "#845ef7",
+    "tom_mid": "#f06595",
+    "tom_low": "#cc5de8",
+    "rim": "#94d82d",
+}
+
+DRUM_LABELS: dict[str, str] = {
+    "kick": "Kick",
+    "snare": "Snare",
+    "hh_closed": "HH C",
+    "hh_open": "HH O",
+    "clap": "Clap",
+    "crash": "Crash",
+    "tom_high": "T H",
+    "tom_mid": "T M",
+    "tom_low": "T L",
+    "rim": "Rim",
+}
 
 
 @dataclass
@@ -112,7 +140,7 @@ class DrumPattern:
         return pattern
 
     @classmethod
-    def from_pattern(cls, pattern: Pattern, bpm: float = 120.0) -> "DrumPattern":
+    def from_pattern(cls, pattern: Pattern, bpm: float = 120.0) -> DrumPattern:
         """Restore a DrumPattern from a Pattern, best-effort.
 
         Args:
@@ -136,6 +164,6 @@ class DrumPattern:
         return drum
 
     @classmethod
-    def empty(cls, name: str = "Empty", steps: int = 16) -> "DrumPattern":
+    def empty(cls, name: str = "Empty", steps: int = 16) -> DrumPattern:
         """Create an empty drum pattern."""
         return cls(name=name, steps=steps)

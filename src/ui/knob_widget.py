@@ -1,5 +1,7 @@
 """KnobWidget: Custom rotary knob control with drag-to-rotate interaction."""
 
+from __future__ import annotations
+
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import QWidget

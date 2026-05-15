@@ -1,5 +1,7 @@
 """Patch dataclass and PatchLibrary for synthesizer preset management."""
 
+from __future__ import annotations
+
 import json
 import os
 from dataclasses import dataclass, field
@@ -126,7 +128,7 @@ class Patch:
     portamento: PortamentoParams = field(default_factory=PortamentoParams)
 
     @classmethod
-    def from_json(cls, path: str) -> "Patch":
+    def from_json(cls, path: str) -> Patch:
         with open(path) as f:
             data = json.load(f)
         return cls(

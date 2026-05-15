@@ -1,5 +1,7 @@
 """DrumSequencer: Transport-synced step sequencer for drum patterns."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from .drum_pattern import DRUM_TYPES, DrumPattern

@@ -1,4 +1,6 @@
 """SynthVoice: Complete monophonic synthesizer voice signal chain.
+from __future__ import annotations
+
 
 Osc1+Osc2 → Mixer → Filter → Amp(ADSR) → Pan → Voice Output
 With LFO modulation and effects sends.

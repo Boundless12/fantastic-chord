@@ -1,4 +1,6 @@
 """DrumSynth: Algorithmic drum sound synthesis using existing DSP blocks.
+from __future__ import annotations
+
 
 Each drum type has a dedicated synthesis recipe: tuned oscillators with pitch
 envelopes, shaped noise, filters, and optional distortion/bit-crushing.

@@ -1,4 +1,6 @@
 """DrumVoice: A renderable drum sound voice for the audio callback.
+from __future__ import annotations
+
 
 Holds a pre-rendered mono buffer and reads from it during callback rendering.
 Trigger and render_block are called on the same audio callback thread,

@@ -1,5 +1,7 @@
 """DrumPatternParser: Converts style DrumPatternRef labels to concrete DrumPattern steps."""
 
+from __future__ import annotations
+
 from ..sequencer.drum_pattern import DRUM_TYPES, DrumPattern
 from .styles import DrumPatternRef
 

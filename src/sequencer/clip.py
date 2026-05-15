@@ -1,5 +1,7 @@
 """Clip dataclass for arrangement timeline."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from .pattern import Pattern
