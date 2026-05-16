@@ -1,9 +1,10 @@
 """Biquad filter implementation using RBJ Audio EQ Cookbook formulas.
-from __future__ import annotations
 
 
 Direct Form I topology with coefficients recomputed on parameter change.
 """
+
+from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt

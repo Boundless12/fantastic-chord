@@ -1,11 +1,12 @@
 """DrumVoice: A renderable drum sound voice for the audio callback.
-from __future__ import annotations
 
 
 Holds a pre-rendered mono buffer and reads from it during callback rendering.
 Trigger and render_block are called on the same audio callback thread,
 so no locking is needed.
 """
+
+from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt

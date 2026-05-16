@@ -1,9 +1,10 @@
 """Oscillator types for the synthesizer engine.
-from __future__ import annotations
 
 
 All oscillators generate mono float32 numpy arrays in range [-1.0, 1.0].
 """
+
+from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
@@ -99,24 +100,88 @@ class NoiseOscillator(Oscillator):
 
 
 class WavetableOscillator(Oscillator):
-    """Oscillator that reads from a pre-loaded wavetable with linear interpolation."""
+    """Serum-style multi-table wavetable oscillator with position crossfade and warp modes."""
 
-    wavetable: npt.NDArray[np.float32]
+    tables: list[npt.NDArray[np.float32]]
     table_size: int
+    wavetable_position: float
+    warp_mode: str
+    warp_amount: float
 
-    def __init__(self, sample_rate: int, wavetable: npt.NDArray[np.float32]) -> None:
+    def __init__(self, sample_rate: int, tables: list[npt.NDArray[np.float32]]) -> None:
         super().__init__(sample_rate, "wavetable")
-        self.wavetable = wavetable.astype(np.float32)
-        self.table_size = len(wavetable)
+        self.tables = [t.astype(np.float32) for t in tables]
+        self.table_size = len(tables[0]) if tables else 2048
+        self.wavetable_position = 0.0
+        self.warp_mode = "none"
+        self.warp_amount = 0.0
 
-    def generate(self, frames: int, fm_input: npt.NDArray[np.float32] | None = None) -> npt.NDArray[np.float32]:
-        phases = self._advance_phase(frames, fm_input)
+    def set_position(self, pos: float) -> None:
+        self.wavetable_position = max(0.0, min(1.0, pos))
+
+    def set_warp(self, mode: str, amount: float) -> None:
+        self.warp_mode = mode
+        self.warp_amount = max(0.0, min(1.0, amount))
+
+    def _read_tables(self, phases: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        num_tables = len(self.tables)
+        if num_tables == 0:
+            return np.sin(phases).astype(np.float32)
+        if num_tables == 1:
+            indices = (phases / PI_2) * self.table_size
+            idx_floor = np.floor(indices).astype(np.int32) % self.table_size
+            idx_ceil = (idx_floor + 1) % self.table_size
+            frac = (indices - np.floor(indices)).astype(np.float32)
+            return np.asarray(
+                self.tables[0][idx_floor] * (1.0 - frac) + self.tables[0][idx_ceil] * frac, dtype=np.float32
+            )
+
+        float_idx = self.wavetable_position * (num_tables - 1)
+        idx_a = int(float_idx)
+        idx_b = min(idx_a + 1, num_tables - 1)
+        mix = float_idx - idx_a
+
         indices = (phases / PI_2) * self.table_size
         idx_floor = np.floor(indices).astype(np.int32) % self.table_size
         idx_ceil = (idx_floor + 1) % self.table_size
         frac = (indices - np.floor(indices)).astype(np.float32)
-        result = self.wavetable[idx_floor] * (1.0 - frac) + self.wavetable[idx_ceil] * frac
-        return np.asarray(result, dtype=np.float32)
+
+        tbl_a = self.tables[idx_a]
+        tbl_b = self.tables[idx_b]
+        samples_a = tbl_a[idx_floor] * (1.0 - frac) + tbl_a[idx_ceil] * frac
+        samples_b = tbl_b[idx_floor] * (1.0 - frac) + tbl_b[idx_ceil] * frac
+        return np.asarray(samples_a * (1.0 - mix) + samples_b * mix, dtype=np.float32)
+
+    def _apply_warp(self, samples: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        if self.warp_mode == "none" or self.warp_amount <= 0.001:
+            return samples
+        amt = self.warp_amount
+        if self.warp_mode == "bend_p":
+            gain = 1.0 + amt * 8.0
+            return np.asarray(np.tanh(samples * gain) / max(np.tanh(np.float32(gain)), 0.1), dtype=np.float32)
+        elif self.warp_mode == "bend_n":
+            gain = 1.0 + amt * 8.0
+            neg = np.where(samples < 0, np.tanh(samples * gain), samples)
+            return np.asarray(neg / max(np.tanh(np.float32(gain)), 0.1), dtype=np.float32)
+        elif self.warp_mode == "mirror":
+            threshold = 1.0 - amt * 0.9
+            return np.where(samples > threshold, 2.0 * threshold - samples, samples)
+        elif self.warp_mode == "fold":
+            gain = 1.0 + amt * 4.0
+            folded = np.abs(samples * gain + (1.0 - amt)) % (4.0 * amt + 0.1) - 2.0 * amt
+            return np.asarray(np.clip(folded, -1.0, 1.0), dtype=np.float32)
+        elif self.warp_mode == "pwm":
+            duty = 0.1 + amt * 0.8
+            return np.where(samples > (duty * 2.0 - 1.0), np.float32(1.0), np.float32(-1.0))
+        elif self.warp_mode == "crush":
+            steps = max(2, int(16 - amt * 14))
+            return np.asarray(np.round(samples * steps) / steps, dtype=np.float32)
+        return samples
+
+    def generate(self, frames: int, fm_input: npt.NDArray[np.float32] | None = None) -> npt.NDArray[np.float32]:
+        phases = self._advance_phase(frames, fm_input)
+        samples = self._read_tables(phases)
+        return self._apply_warp(samples)
 
 
 class FMOscillator:

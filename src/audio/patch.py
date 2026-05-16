@@ -108,6 +108,20 @@ class PortamentoParams:
 
 
 @dataclass
+class UnisonParams:
+    voices: int = 1
+    detune: float = 0.1
+    spread: float = 0.3
+
+
+@dataclass
+class ModSlotData:
+    source: str = "lfo1"
+    destination: str = "cutoff"
+    amount: float = 0.0
+
+
+@dataclass
 class Patch:
     """Complete synthesizer patch serializable to JSON."""
 
@@ -126,6 +140,10 @@ class Patch:
     lfo2: LFOParams = field(default_factory=LFOParams)
     effects: EffectsParams = field(default_factory=EffectsParams)
     portamento: PortamentoParams = field(default_factory=PortamentoParams)
+    unison: UnisonParams = field(default_factory=UnisonParams)
+    sub_osc_level: float = 0.0
+    sub_octave: int = -1
+    mod_slots: list[ModSlotData] = field(default_factory=list)
 
     @classmethod
     def from_json(cls, path: str) -> Patch:
@@ -146,6 +164,10 @@ class Patch:
             lfo2=LFOParams(**data.get("lfo2", {})),
             effects=EffectsParams(**data.get("effects", {})),
             portamento=PortamentoParams(**data.get("portamento", {})),
+            unison=UnisonParams(**data.get("unison", {})),
+            sub_osc_level=data.get("sub_osc_level", 0.0),
+            sub_octave=data.get("sub_octave", -1),
+            mod_slots=[ModSlotData(**s) for s in data.get("mod_slots", [])],
         )
 
     def to_json(self, path: str) -> None:
@@ -164,6 +186,10 @@ class Patch:
             "lfo2": self.lfo2.__dict__,
             "effects": self.effects.__dict__,
             "portamento": self.portamento.__dict__,
+            "unison": self.unison.__dict__,
+            "sub_osc_level": self.sub_osc_level,
+            "sub_octave": self.sub_octave,
+            "mod_slots": [s.__dict__ for s in self.mod_slots],
         }
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:

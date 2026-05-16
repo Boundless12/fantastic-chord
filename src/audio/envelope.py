@@ -1,9 +1,10 @@
 """ADSR and DAHDSR envelope generators.
-from __future__ import annotations
 
 
 State machines that produce per-sample envelope amplitude values.
 """
+
+from __future__ import annotations
 
 from enum import Enum, auto
 
@@ -122,10 +123,105 @@ class ADSR:
         return self._value
 
     def render_block(self, frames: int) -> npt.NDArray[np.float32]:
-        out = np.empty(frames, dtype=np.float32)
-        for i in range(frames):
-            out[i] = self.process()
-        return out
+        if self._state == EnvState.IDLE:
+            self._value = 0.0
+            return np.zeros(frames, dtype=np.float32)
+
+        if self._state == EnvState.SUSTAIN:
+            self._value = self.sustain
+            return np.full(frames, self.sustain, dtype=np.float32)
+
+        if self._state == EnvState.ATTACK:
+            total = self._attack_samples()
+            remaining = max(1, total - self._sample_counter)
+            if remaining >= frames:
+                start_val = self._sample_counter / total
+                end_val = (self._sample_counter + frames) / total
+                self._sample_counter += frames
+                if self._sample_counter >= total:
+                    self._state = EnvState.DECAY
+                    self._sample_counter = 0
+                self._value = end_val
+                return np.linspace(start_val, end_val, frames, dtype=np.float32)
+            else:
+                seg1 = np.linspace(self._sample_counter / total, 1.0, remaining, dtype=np.float32)
+                self._state = EnvState.DECAY
+                self._sample_counter = 0
+                self._value = 1.0
+                remaining_frames = frames - remaining
+                return np.concatenate([seg1, self.render_block(remaining_frames)])
+
+        if self._state == EnvState.DECAY:
+            total = self._decay_samples()
+            remaining = max(1, total - self._sample_counter)
+            if remaining >= frames:
+                start_val = 1.0 - (1.0 - self.sustain) * (self._sample_counter / total)
+                end_val = 1.0 - (1.0 - self.sustain) * ((self._sample_counter + frames) / total)
+                self._sample_counter += frames
+                if self._sample_counter >= total:
+                    self._state = EnvState.SUSTAIN
+                    self._value = self.sustain
+                else:
+                    self._value = end_val
+                return np.linspace(start_val, end_val, frames, dtype=np.float32)
+            else:
+                start_val = 1.0 - (1.0 - self.sustain) * (self._sample_counter / total)
+                seg1 = np.linspace(start_val, self.sustain, remaining, dtype=np.float32)
+                self._state = EnvState.SUSTAIN
+                self._sample_counter = 0
+                self._value = self.sustain
+                remaining_frames = frames - remaining
+                return np.concatenate([seg1, self.render_block(remaining_frames)])
+
+        if self._state == EnvState.RELEASE:
+            total = self._release_samples()
+            remaining = max(1, total - self._sample_counter)
+            if remaining >= frames:
+                start_val = self.sustain * (1.0 - self._sample_counter / total)
+                end_val = self.sustain * (1.0 - (self._sample_counter + frames) / total)
+                self._sample_counter += frames
+                if self._sample_counter >= total:
+                    self._state = EnvState.IDLE
+                    self._value = 0.0
+                else:
+                    self._value = end_val
+                return np.linspace(start_val, end_val, frames, dtype=np.float32)
+            else:
+                start_val = self.sustain * (1.0 - self._sample_counter / total)
+                seg1 = np.linspace(start_val, 0.0, remaining, dtype=np.float32)
+                self._state = EnvState.IDLE
+                self._sample_counter = 0
+                self._value = 0.0
+                remaining_frames = frames - remaining
+                return np.concatenate([seg1, self.render_block(remaining_frames)])
+
+        if self._state == EnvState.DELAY:
+            total = self._delay_samples() if hasattr(self, "_delay_samples") else 1
+            remaining = max(1, total - self._sample_counter)
+            if remaining >= frames:
+                self._sample_counter += frames
+                self._value = 0.0
+                return np.zeros(frames, dtype=np.float32)
+            seg1 = np.zeros(remaining, dtype=np.float32)
+            self._state = EnvState.ATTACK
+            self._sample_counter = 0
+            self._value = 0.0
+            return np.concatenate([seg1, self.render_block(frames - remaining)])
+
+        if self._state == EnvState.HOLD:
+            total = self._hold_samples() if hasattr(self, "_hold_samples") else 1
+            remaining = max(1, total - self._sample_counter)
+            if remaining >= frames:
+                self._sample_counter += frames
+                self._value = 1.0
+                return np.ones(frames, dtype=np.float32)
+            seg1 = np.ones(remaining, dtype=np.float32)
+            self._state = EnvState.DECAY
+            self._sample_counter = 0
+            self._value = 1.0
+            return np.concatenate([seg1, self.render_block(frames - remaining)])
+
+        return np.zeros(frames, dtype=np.float32)
 
 
 class DAHDSR(ADSR):

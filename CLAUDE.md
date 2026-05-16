@@ -1,9 +1,11 @@
 # 酷和弦 (Cool Chord) - EDM Chord Synthesizer
 
 ## CRITICAL: Working Directory
-ALL file paths MUST use `D:\编程\2 fantastic chord\`. Never use `D:\プログラミング\2 fantastic chord\`.
-Before any write/edit operation, verify the path contains `编程` not `プログラミング`.
-If you accidentally write to `D:\プログラミング`, immediately move files and delete that directory.
+ALL file paths MUST use `D:\编程\2 fantastic chord\` (Chinese 编程, NOT Japanese プログラミング).
+Never use `D:\プログラミング\2 fantastic chord\` — this path does NOT exist and will cause errors.
+Before any Read/Write/Edit/Bash operation, double-check: the directory is `编程` (2 chars 编+程), NOT `プログラミング` (6 katakana chars).
+Common mistake: typing `プログラミング` (programming in katakana) instead of `编程` (Chinese).
+If you accidentally try `D:\プログラミング`, immediately retry with `D:\编程`.
 
 ## Current State (2026-05-15)
 - **Phase**: 1-12 全部完成
@@ -45,6 +47,24 @@ and WAV/MIDI export.
 
 ## Coding Standards
 - PEP 8 via Black (120 char line, Python 3.11 target)
+- Type hints REQUIRED everywhere (mypy strict)
+- Module docstrings only - no excessive comments
+- All synthesis local, no cloud APIs, offline-first
+- `from __future__ import annotations` in all source files
+
+## Auto-Approval Rules
+- After making code changes, ALWAYS run: `python -m pytest tests/ -x && ruff check src/ tests/ && mypy src/`
+- Do NOT ask for permission before running tests, lints, or quality checks
+- Do NOT ask for permission before running `python src/main.py`
+- Do NOT ask "Do you want me to run tests?" — just run them automatically
+- When the user says "打开程序" or "运行程序", just launch it immediately without asking
+- When the user says "继续下一步", immediately figure out the next logical step and do it
+- After any file edit, immediately proceed to the next task without waiting for confirmation
+- Use Bash for operations when possible to avoid path errors
+- NEVER use the path `D:\プログラミング\2 fantastic chord\` — always use `D:\编程\2 fantastic chord\`
+- If you accidentally type `プログラミング` in a path, immediately correct it to `编程` before executing
+
+## Directory Structure
 - Type hints REQUIRED everywhere (mypy strict)
 - Module docstrings only - no excessive comments
 - All synthesis local, no cloud APIs, offline-first

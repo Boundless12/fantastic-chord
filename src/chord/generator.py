@@ -120,7 +120,8 @@ class ProgressionGenerator:
         else:
             pattern = random.choice(patterns)
             total_beats = sum(pattern.durations)
-            scale_factor = (bars * beats_per_bar) / max(total_beats, 1)
+            raw_scale = (bars * beats_per_bar) / max(total_beats, 1)
+            scale_factor = min(raw_scale, beats_per_bar * 0.75)
             for i, c in enumerate(chords):
                 if i < len(pattern.durations):
                     c.duration = pattern.durations[i] * scale_factor

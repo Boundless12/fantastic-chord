@@ -6,11 +6,15 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from PySide6.QtCore import QObject, Signal
+
 from .pattern import Note, Pattern
 from .track import Track
 from .transport import Transport
 
 logger = logging.getLogger(__name__)
+
+TRACK_COLORS: list[str] = ["#4ecdc4", "#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff", "#ff922b", "#845ef7", "#f06595"]
 
 
 @dataclass
@@ -18,12 +22,15 @@ class PianoRollAction:
     """A single undoable action."""
 
     description: str
+    track_index: int = 0
     undo_data: dict[str, Any] = field(default_factory=dict)
     redo_data: dict[str, Any] = field(default_factory=dict)
 
 
-class PianoRollModel:
+class PianoRollModel(QObject):
     """The data model backing the piano roll editor."""
+
+    active_track_changed = Signal(int)
 
     tracks: list[Track]
     transport: Transport
@@ -31,31 +38,53 @@ class PianoRollModel:
     _undo_stack: list[PianoRollAction]
     _redo_stack: list[PianoRollAction]
     _max_undo: int
+    _active_track_index: int
 
     def __init__(self, transport: Transport) -> None:
-        self.tracks = [Track(name="Track 1", color="#4ecdc4")]
+        super().__init__()
+        self.tracks = [Track(name="Track 1", color=TRACK_COLORS[0])]
         self.transport = transport
         self.grid = 0.25
         self._undo_stack = []
         self._redo_stack = []
         self._max_undo = 200
+        self._active_track_index = 0
 
-    def add_track(self, track: Track) -> None:
+    def add_track(self, track: Track | None = None) -> Track:
+        if track is None:
+            idx = len(self.tracks)
+            track = Track(
+                name=f"Track {idx + 1}",
+                color=TRACK_COLORS[idx % len(TRACK_COLORS)],
+            )
         self.tracks.append(track)
+        return track
 
     def remove_track(self, index: int) -> None:
-        if 0 <= index < len(self.tracks):
+        if 0 <= index < len(self.tracks) and len(self.tracks) > 1:
             del self.tracks[index]
+            if self._active_track_index >= len(self.tracks):
+                self._active_track_index = len(self.tracks) - 1
+
+    @property
+    def active_track_index(self) -> int:
+        return self._active_track_index
+
+    def set_active_track(self, index: int) -> None:
+        if 0 <= index < len(self.tracks) and index != self._active_track_index:
+            self._active_track_index = index
+            self.active_track_changed.emit(index)
 
     @property
     def current_track(self) -> Track:
-        return self.tracks[0]
+        return self.tracks[self._active_track_index]
 
     @property
     def current_pattern(self) -> Pattern:
-        if not self.tracks[0].patterns:
-            self.tracks[0].patterns.append(Pattern(length_beats=16.0))
-        return self.tracks[0].patterns[0]
+        track = self.current_track
+        if not track.patterns:
+            track.patterns.append(Pattern(length_beats=16.0))
+        return track.patterns[0]
 
     def insert_note(self, pitch: int, start: float, duration: float, velocity: int = 100) -> Note:
         note = Note(pitch=pitch, velocity=velocity, start_time=start, duration=duration)
@@ -63,6 +92,7 @@ class PianoRollModel:
         self._push_undo(
             PianoRollAction(
                 description="Insert note",
+                track_index=self._active_track_index,
                 undo_data={"action": "delete_note", "index": len(self.current_pattern.notes) - 1},
                 redo_data={"action": "insert_note", "note": note},
             )
@@ -75,6 +105,7 @@ class PianoRollModel:
             removed = pattern.notes.pop(index)
             self._push_undo(
                 PianoRollAction(
+                    track_index=self._active_track_index,
                     description="Delete note",
                     undo_data={"action": "insert_note", "note": removed, "index": index},
                     redo_data={"action": "delete_note", "index": index},
@@ -95,6 +126,7 @@ class PianoRollModel:
         if removed_notes:
             self._push_undo(
                 PianoRollAction(
+                    track_index=self._active_track_index,
                     description="Delete notes in range",
                     undo_data={"action": "insert_notes", "notes": removed_notes},
                     redo_data={
@@ -118,6 +150,7 @@ class PianoRollModel:
             note.pitch = max(0, min(127, new_pitch))
             self._push_undo(
                 PianoRollAction(
+                    track_index=self._active_track_index,
                     description="Move note",
                     undo_data={"action": "move_note", "index": index, "start": old_start, "pitch": old_pitch},
                     redo_data={"action": "move_note", "index": index, "start": new_start, "pitch": new_pitch},
@@ -134,6 +167,7 @@ class PianoRollModel:
             note.duration = max(0.0625, new_duration)
             self._push_undo(
                 PianoRollAction(
+                    track_index=self._active_track_index,
                     description="Resize note",
                     undo_data={"action": "resize_note", "index": index, "duration": old_duration},
                     redo_data={"action": "resize_note", "index": index, "duration": new_duration},
@@ -155,6 +189,7 @@ class PianoRollModel:
             note.duration = round(note.duration / g) * max(g, g)
         self._push_undo(
             PianoRollAction(
+                track_index=self._active_track_index,
                 description="Quantize",
                 undo_data={"action": "restore_starts", "starts": old_starts},
                 redo_data={"action": "quantize", "grid": g},
@@ -187,6 +222,7 @@ class PianoRollModel:
             self._undo_stack.pop(0)
 
     def _apply_undo(self, action: PianoRollAction) -> None:
+        self._active_track_index = action.track_index
         data = action.undo_data
         act = data.get("action", "")
         pattern = self.current_pattern
@@ -216,6 +252,7 @@ class PianoRollModel:
                     pattern.notes[idx].start_time = start
 
     def _apply_redo(self, action: PianoRollAction) -> None:
+        self._active_track_index = action.track_index
         data = action.redo_data
         act = data.get("action", "")
         pattern = self.current_pattern

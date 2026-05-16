@@ -65,10 +65,8 @@ class LFO:
         self.rate_sync_subdiv = subdivision
 
     def process(self, frames: int) -> npt.NDArray[np.float32]:
-        out = np.zeros(frames, dtype=np.float32)
-
         if self.depth <= 0.0:
-            return out
+            return np.zeros(frames, dtype=np.float32)
 
         phase_increment = 2.0 * np.pi * self.rate / self._sample_rate
         fade_gain = 1.0
@@ -76,36 +74,41 @@ class LFO:
             fade_samples = int(self.fade_in * self._sample_rate)
             fade_gain = min(1.0, self._age_samples / max(1, fade_samples))
 
-        for i in range(frames):
-            if self.waveform == "sine":
-                val = np.sin(self.phase)
-            elif self.waveform == "triangle":
-                val = (
-                    2.0 * np.abs(2.0 * (self.phase / (2.0 * np.pi) - np.floor(0.5 + self.phase / (2.0 * np.pi)))) - 1.0
-                )
-            elif self.waveform == "square":
-                val = 1.0 if np.sin(self.phase) >= 0.0 else -1.0
-            elif self.waveform == "saw_up":
-                val = 2.0 * (self.phase / (2.0 * np.pi) - np.floor(0.5 + self.phase / (2.0 * np.pi)))
-            elif self.waveform == "saw_down":
-                val = 1.0 - 2.0 * (self.phase / (2.0 * np.pi) - np.floor(self.phase / (2.0 * np.pi)))
-            elif self.waveform == "sample_hold":
-                if i == 0 or (self.phase + phase_increment) % (2.0 * np.pi) < self.phase % (2.0 * np.pi):
-                    self._held = np.random.uniform(-1.0, 1.0)
-                val = getattr(self, "_held", 0.0)
-            elif self.waveform == "random":
-                val = np.random.uniform(-1.0, 1.0)
-            else:
-                val = 0.0
+        # Build phase array for the full block
+        phase_end = self.phase + phase_increment * frames
+        phases = np.linspace(self.phase, phase_end, frames, endpoint=False, dtype=np.float64)
 
-            out[i] = np.float32(val * self.depth * fade_gain)
-            self.phase += phase_increment
-            if self.phase >= 2.0 * np.pi:
-                self.phase -= 2.0 * np.pi
-                if self.one_shot:
-                    self.depth = 0.0
-                    break
+        if self.waveform == "sine":
+            vals = np.sin(phases)
+        elif self.waveform == "triangle":
+            vals = 2.0 * np.abs(2.0 * (phases / (2.0 * np.pi) - np.floor(0.5 + phases / (2.0 * np.pi)))) - 1.0
+        elif self.waveform == "square":
+            vals = np.where(np.sin(phases) >= 0.0, 1.0, -1.0)
+        elif self.waveform == "saw_up":
+            vals = 2.0 * (phases / (2.0 * np.pi) - np.floor(0.5 + phases / (2.0 * np.pi)))
+        elif self.waveform == "saw_down":
+            vals = 1.0 - 2.0 * (phases / (2.0 * np.pi) - np.floor(phases / (2.0 * np.pi)))
+        elif self.waveform == "sample_hold":
+            vals = np.empty(frames, dtype=np.float64)
+            wrap_mask = np.diff((phases // (2.0 * np.pi)).astype(np.int32), prepend=-1) != 0
+            held = getattr(self, "_held", 0.0)
+            for i in range(frames):
+                if wrap_mask[i]:
+                    held = np.random.uniform(-1.0, 1.0)
+                vals[i] = held
+            self._held = held
+        elif self.waveform == "random":
+            vals = np.random.uniform(-1.0, 1.0, frames)
+        else:
+            return np.zeros(frames, dtype=np.float32)
 
-            self._age_samples += 1
+        out = np.asarray(vals * self.depth * fade_gain, dtype=np.float32)
 
-        return np.asarray(out, dtype=np.float32)
+        # Update state
+        self.phase = float(phase_end % (2.0 * np.pi))
+        self._age_samples += frames
+
+        if self.one_shot and phase_end >= 2.0 * np.pi:
+            self.depth = 0.0
+
+        return out

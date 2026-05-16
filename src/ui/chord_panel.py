@@ -36,6 +36,7 @@ class ChordPanel(QWidget):
     _generator: ProgressionGenerator
     _progressions: list[ProgressionData]
     _chord_items: list[QListWidgetItem]
+    _preview_running: bool
 
     _key_combo: QComboBox
     _scale_combo: QComboBox
@@ -56,6 +57,7 @@ class ChordPanel(QWidget):
         self._generator = ProgressionGenerator(STYLE_MANAGER)
         self._progressions = []
         self._chord_items = []
+        self._preview_running = False
 
         self._setup_ui()
 
@@ -247,15 +249,24 @@ class ChordPanel(QWidget):
 
         bpm = progression.bpm
         beat_duration = 60.0 / bpm
+        self._preview_running = True
+        engine = self._engine
 
         def _play() -> None:
             for chord in progression.chords:
+                if not self._preview_running:
+                    break
                 for pitch in chord.notes:
-                    self._engine.note_on(pitch, 80)  # type: ignore[union-attr]
+                    engine.note_on(pitch, 80)
                 _time.sleep(chord.duration * beat_duration * 0.8)
+                if not self._preview_running:
+                    for pitch in chord.notes:
+                        engine.note_off(pitch)
+                    break
                 for pitch in chord.notes:
-                    self._engine.note_off(pitch)  # type: ignore[union-attr]
+                    engine.note_off(pitch)
                 _time.sleep(chord.duration * beat_duration * 0.2)
+            self._preview_running = False
 
         Thread(target=_play, daemon=True).start()
 

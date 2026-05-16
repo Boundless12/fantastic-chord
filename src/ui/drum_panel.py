@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
 from ..audio.drum_kit import DRUM_KIT_PRESETS
 from ..audio.engine import AudioEngine
-from ..chord.drum_patterns import DrumPatternParser
+from ..chord.drum_patterns import DrumPatternGenerator, DrumPatternParser
 from ..sequencer.drum_pattern import DRUM_LABELS, DRUM_TYPES
 from ..sequencer.transport import Transport
 from .drum_pad_widget import DrumPadWidget
@@ -32,6 +34,13 @@ class DrumPanel(QWidget):
     _sequencer: StepSequencerWidget
     _kit_combo: QComboBox
     _label_combos: dict[str, QComboBox]
+    _preview_btn: QPushButton
+    _stop_preview_btn: QPushButton
+    _preview_running: bool
+    _gen_style_combo: QComboBox
+    _gen_complexity: QSlider
+    _gen_btn: QPushButton
+    _preview_loop_cb: QCheckBox
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,6 +48,7 @@ class DrumPanel(QWidget):
         self._transport = None
         self._pads = {}
         self._label_combos = {}
+        self._preview_running = False
 
         self._setup_ui()
         self._setup_poll_timer()
@@ -88,6 +98,24 @@ class DrumPanel(QWidget):
         self._sequencer = StepSequencerWidget()
         self._sequencer.pattern_changed.connect(self._on_pattern_changed)
         seq_layout.addWidget(self._sequencer)
+
+        preview_layout = QHBoxLayout()
+        self._preview_btn = QPushButton("Preview Pattern")
+        self._preview_btn.clicked.connect(self._on_preview_pattern)
+        preview_layout.addWidget(self._preview_btn)
+
+        self._stop_preview_btn = QPushButton("Stop Preview")
+        self._stop_preview_btn.clicked.connect(self._on_stop_preview)
+        self._stop_preview_btn.setVisible(False)
+        preview_layout.addWidget(self._stop_preview_btn)
+
+        self._preview_loop_cb = QCheckBox("Loop")
+        self._preview_loop_cb.setStyleSheet("color: #8888a0; font-size: 9px;")
+        preview_layout.addWidget(self._preview_loop_cb)
+
+        preview_layout.addStretch()
+        seq_layout.addLayout(preview_layout)
+
         layout.addWidget(seq_group, 1)
 
         # Pattern label selectors per drum type
@@ -115,6 +143,30 @@ class DrumPanel(QWidget):
             labels_outer.addLayout(row_layout)
 
         layout.addWidget(labels_group)
+
+        # Auto Generate section
+        gen_group = QGroupBox("Auto Generate")
+        gen_layout = QVBoxLayout(gen_group)
+
+        gen_row1 = QHBoxLayout()
+        gen_row1.addWidget(QLabel("Style:"))
+        self._gen_style_combo = QComboBox()
+        self._gen_style_combo.addItems(DrumPatternGenerator.get_available_styles())
+        gen_row1.addWidget(self._gen_style_combo)
+
+        gen_row1.addWidget(QLabel("Complex:"))
+        self._gen_complexity = QSlider(Qt.Orientation.Horizontal)
+        self._gen_complexity.setRange(0, 100)
+        self._gen_complexity.setValue(50)
+        self._gen_complexity.setFixedWidth(80)
+        gen_row1.addWidget(self._gen_complexity)
+        gen_layout.addLayout(gen_row1)
+
+        self._gen_btn = QPushButton("Generate Rhythm")
+        self._gen_btn.clicked.connect(self._on_generate_pattern)
+        gen_layout.addWidget(self._gen_btn)
+
+        layout.addWidget(gen_group)
 
     def _setup_poll_timer(self) -> None:
         self._poll_timer = QTimer(self)
@@ -160,6 +212,13 @@ class DrumPanel(QWidget):
             pattern = self._sequencer.get_pattern()
             self._engine.set_drum_pattern(pattern)
 
+    def _on_generate_pattern(self) -> None:
+        style = self._gen_style_combo.currentText()
+        complexity = self._gen_complexity.value() / 100.0
+        pattern = DrumPatternGenerator.generate(style=style, complexity=complexity)
+        self._sequencer.set_pattern(pattern)
+        self._on_pattern_changed()
+
     def _on_apply_style(self) -> None:
         """Apply label selections from quick-pattern combos to the sequencer grid."""
         from ..chord.styles import DrumPatternRef
@@ -196,6 +255,44 @@ class DrumPanel(QWidget):
             step_list[i].active = i in steps
         self._sequencer.set_pattern(current)
         self._on_pattern_changed()
+
+    def _on_preview_pattern(self) -> None:
+        pattern = self._sequencer.get_pattern()
+        parts = pattern.get_parts()
+        bpm = self._transport.bpm if self._transport else 120.0
+        step_duration = 60.0 / bpm / 4.0
+        loop = self._preview_loop_cb.isChecked()
+
+        self._preview_running = True
+        self._preview_btn.setVisible(False)
+        self._stop_preview_btn.setVisible(True)
+
+        import time as _time
+        from threading import Thread
+
+        def _play() -> None:
+            steps = pattern.steps
+            while self._preview_running:
+                for step_idx in range(steps):
+                    if not self._preview_running:
+                        break
+                    for drum_type in DRUM_TYPES:
+                        step_list = parts.get(drum_type, [])
+                        if step_idx < len(step_list) and step_list[step_idx].active:
+                            self._engine.trigger_drum(drum_type, 100)  # type: ignore[union-attr]
+                    _time.sleep(step_duration)
+                if not loop:
+                    break
+            self._preview_running = False
+            self._preview_btn.setVisible(True)
+            self._stop_preview_btn.setVisible(False)
+
+        Thread(target=_play, daemon=True).start()
+
+    def _on_stop_preview(self) -> None:
+        self._preview_running = False
+        self._preview_btn.setVisible(True)
+        self._stop_preview_btn.setVisible(False)
 
     # -- Public API --
 

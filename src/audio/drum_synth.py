@@ -1,11 +1,12 @@
 """DrumSynth: Algorithmic drum sound synthesis using existing DSP blocks.
-from __future__ import annotations
 
 
 Each drum type has a dedicated synthesis recipe: tuned oscillators with pitch
 envelopes, shaped noise, filters, and optional distortion/bit-crushing.
 All sounds are synthesized locally — no sample files required.
 """
+
+from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt

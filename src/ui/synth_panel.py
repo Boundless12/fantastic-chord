@@ -46,6 +46,7 @@ class SynthPanel(QWidget):
     _knobs: dict[str, KnobWidget]
     _cc_mappings: dict[int, str]
     _learn_target: KnobWidget | None
+    _preview_btn: QPushButton
     _preset_combo: QComboBox
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -91,6 +92,7 @@ class SynthPanel(QWidget):
         sections_layout.addWidget(self._make_lfo2_section())
         sections_layout.addWidget(self._make_effects_section())
         sections_layout.addWidget(self._make_portamento_section())
+        sections_layout.addWidget(self._make_unison_section())
         sections_layout.addStretch()
 
         scroll.setWidget(sections)
@@ -129,6 +131,12 @@ class SynthPanel(QWidget):
         init_btn.clicked.connect(self._on_init_patch)
         row.addWidget(init_btn)
 
+        self._preview_btn = QPushButton("Preview")
+        self._preview_btn.setFixedSize(60, 24)
+        self._preview_btn.setToolTip("Play a test note (C4)")
+        self._preview_btn.clicked.connect(self._on_preview)
+        row.addWidget(self._preview_btn)
+
         row.addStretch()
         return row
 
@@ -150,6 +158,21 @@ class SynthPanel(QWidget):
         self._add_knob(grid, 1, 0, f"{prefix}.pulse_width", "PulseW", default=0.5, row_name="osc")
         self._add_knob(grid, 1, 1, f"{prefix}.phase", "Phase", default=0.0, row_name="osc")
         self._add_knob(grid, 1, 2, f"{prefix}.fm_amount", "FM Amt", default=0.0, row_name="osc")
+        # Serum controls: wavetable position + warp
+        self._add_knob(grid, 2, 0, f"{prefix}.wt_position", "WT Pos", default=0.0, row_name="wavetable")
+        warp_opts = ["none", "bend_p", "bend_n", "mirror", "fold", "pwm", "crush"]
+        self._add_knob(
+            grid,
+            2,
+            1,
+            f"{prefix}.warp_mode_int",
+            "Warp",
+            display_map=warp_opts,
+            default=0,
+            step=0.1667,
+            row_name="wavetable",
+        )
+        self._add_knob(grid, 2, 2, f"{prefix}.warp_amount", "WarpAmt", default=0.0, row_name="wavetable")
         return group
 
     def _make_osc1_section(self) -> QGroupBox:
@@ -243,6 +266,16 @@ class SynthPanel(QWidget):
         self._add_knob(grid, 0, 1, "effects.delay_send", "Delay", default=0.0)
         self._add_knob(grid, 0, 2, "effects.chorus_send", "Chorus", default=0.0)
         self._add_knob(grid, 0, 3, "effects.distortion_drive", "Drive", default=0.0)
+        return group
+
+    def _make_unison_section(self) -> QGroupBox:
+        group = QGroupBox("Unison")
+        group.setStyleSheet(self._group_style())
+        grid = QGridLayout(group)
+        grid.setSpacing(4)
+        self._add_knob(grid, 0, 0, "unison.voices", "Voices", default=1, step=1, vrange=(1, 7), fmt="int")
+        self._add_knob(grid, 0, 1, "unison.detune", "Detune", default=0.1)
+        self._add_knob(grid, 0, 2, "unison.spread", "Spread", default=0.3)
         return group
 
     def _make_portamento_section(self) -> QGroupBox:
@@ -369,6 +402,19 @@ class SynthPanel(QWidget):
     def _on_init_patch(self) -> None:
         default_patch = Patch()
         self._apply_patch_to_knobs(default_patch)
+
+    def _on_preview(self) -> None:
+        if self._engine is None:
+            return
+        import time as _time
+        from threading import Thread
+
+        def _play() -> None:
+            self._engine.note_on(60, 80)  # type: ignore[union-attr]
+            _time.sleep(0.4)
+            self._engine.note_off(60)  # type: ignore[union-attr]
+
+        Thread(target=_play, daemon=True).start()
 
     def _apply_patch_to_knobs(self, patch: Patch) -> None:
         """Update all knobs to reflect a loaded patch."""

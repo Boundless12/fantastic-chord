@@ -20,11 +20,12 @@ from ..sequencer.drum_pattern import DrumPattern
 from ..sequencer.drum_sequencer import DrumSequencer, TriggerEvent
 from ..sequencer.piano_roll_sequencer import PianoRollSequencer
 from ..sequencer.transport import Transport
+from .compressor import EQ, Compressor
 from .constants import BLOCK_SIZE, CHANNELS, MAX_DRUM_VOICES, MAX_SYNTH_VOICES, SAMPLE_RATE
 from .drum_kit import DRUM_KIT_PRESETS, DrumKitPreset
 from .drum_synth import DrumSynth
 from .drum_voice import DrumVoice
-from .effects import Chorus, Delay, Distortion, Reverb
+from .effects import BitCrusher, Chorus, Delay, Distortion, Reverb
 from .patch import Patch
 from .synth_voice import SynthVoice
 
@@ -66,6 +67,9 @@ class AudioEngine:
     delay: Delay
     chorus: Chorus
     distortion: Distortion
+    bit_crusher: BitCrusher
+    compressor: Compressor
+    eq: EQ
 
     def __init__(
         self,
@@ -98,11 +102,15 @@ class AudioEngine:
         self.piano_roll_sequencer = PianoRollSequencer(self.transport)
 
         self._current_patch: Patch | None = None
+        self._track_types: list[str] = ["synth"]
 
         self.reverb = Reverb()
         self.delay = Delay()
         self.chorus = Chorus()
         self.distortion = Distortion()
+        self.bit_crusher = BitCrusher()
+        self.compressor = Compressor(self.sample_rate)
+        self.eq = EQ(self.sample_rate)
 
     @staticmethod
     def list_devices() -> list[dict[str, Any]]:
@@ -189,9 +197,9 @@ class AudioEngine:
     def enable_piano_roll_playback(self, enabled: bool) -> None:
         self.piano_roll_sequencer.set_enabled(enabled)
 
-    def set_piano_roll_pattern(self, pattern: object) -> None:
-        self.command_queue.put(("piano_roll_set_pattern",))
-        self.piano_roll_sequencer.set_pattern(pattern)  # type: ignore[arg-type]
+    def set_piano_roll_pattern(self, pattern: object, track_index: int = 0) -> None:
+        self.command_queue.put(("piano_roll_set_pattern", str(track_index)))
+        self.piano_roll_sequencer.set_pattern(track_index, pattern)  # type: ignore[arg-type]
 
     def _set_drum_pattern_direct(self, pattern: DrumPattern) -> None:
         """Directly set the pattern reference (called from dispatch)."""
@@ -244,7 +252,29 @@ class AudioEngine:
 
     # -- Direct voice methods (called from audio callback, no queue) --
 
-    def _note_on_direct(self, note: int, velocity: int) -> None:
+    def set_track_types(self, types: list[str]) -> None:
+        self._track_types = types
+
+    def _get_track_type(self, track_index: int) -> str:
+        if track_index < len(self._track_types):
+            return self._track_types[track_index]
+        return "synth"
+
+    def _note_on_direct(self, note: int, velocity: int, track_index: int = 0) -> None:
+        track_type = self._get_track_type(track_index)
+        if track_type == "drums":
+            from ..sequencer.drum_pattern import GM_DRUM_MAP
+
+            drum_type = "kick"
+            for dt, gm_note in GM_DRUM_MAP.items():
+                if gm_note == note:
+                    drum_type = dt
+                    break
+            self._trigger_drum_from_event(
+                type("Event", (), {"drum_type": drum_type, "velocity": velocity / 127.0, "pan": 0.0})()
+            )
+            return
+
         if note in self._note_to_voice:
             existing = self._note_to_voice[note]
             self.voices[existing].note_off()
@@ -252,7 +282,7 @@ class AudioEngine:
         if v_idx is not None:
             self.voices[v_idx].note_on(note, velocity)
 
-    def _note_off_direct(self, note: int) -> None:
+    def _note_off_direct(self, note: int, track_index: int = 0) -> None:
         if note in self._note_to_voice:
             v_idx = self._note_to_voice[note]
             self.voices[v_idx].note_off()
@@ -336,12 +366,22 @@ class AudioEngine:
             for dv in self.drum_voices:
                 dv.reset()
 
+        elif cmd_type == "set_mod_slot":
+            if len(cmd) >= 5:
+                slot_idx = int(cmd[1])
+                src = cmd[2]
+                dst = cmd[3]
+                amt = float(cmd[4])
+                for voice in self.voices:
+                    voice.mod_matrix.set_slot(slot_idx, src, dst, amt)
+
         elif cmd_type == "panic":
             for voice in self.voices:
                 voice.active = False
             self._note_to_voice.clear()
             for dv in self.drum_voices:
                 dv.reset()
+            self._clear_effects()
 
         elif cmd_type == "patch_load":
             if self._current_patch is not None:
@@ -375,6 +415,22 @@ class AudioEngine:
         elif cmd_type == "piano_roll_set_pattern":
             # Pattern is set directly on the sequencer before enqueue
             pass
+
+    def _clear_effects(self) -> None:
+        """Reset all effects buffers to silence."""
+        for i in range(4):
+            self.reverb._comb_buffers[i].fill(0)
+            self.reverb._comb_positions[i] = 0
+        for i in range(2):
+            self.reverb._ap_buffers[i].fill(0)
+            self.reverb._ap_positions[i] = 0
+        self.delay._buffer_left.fill(0)
+        self.delay._buffer_right.fill(0)
+        self.delay._pos_left = 0
+        self.delay._pos_right = 0
+        self.chorus._buffer.fill(0)
+        self.chorus._pos = 0
+        self.chorus._lfo_phase = 0.0
 
     def _trigger_drum_from_event(self, event: TriggerEvent) -> None:
         """Trigger a drum sound directly from a TriggerEvent (called in callback)."""
@@ -462,7 +518,7 @@ class AudioEngine:
             mixed = self.distortion.process(mixed)
             mixed *= self.master_volume
 
-            np.clip(mixed, -1.0, 1.0, out=mixed)
+            np.tanh(mixed, out=mixed)
             output[offset : offset + frames] = mixed
 
         # Restore transport state
@@ -534,7 +590,7 @@ class AudioEngine:
                     self._voice_ages[i] += 1
                     if voice.is_finished():
                         voice.active = False
-            np.clip(synth_mix, -1.0, 1.0, out=synth_mix)
+            np.tanh(synth_mix, out=synth_mix)
             stem_synth[offset : offset + frames] = synth_mix
 
             # Render drums (dry, no effects)
@@ -547,7 +603,7 @@ class AudioEngine:
                     self._drum_voice_ages[i] += 1
                     if dv.is_finished():
                         dv.active = False
-            np.clip(drum_mix, -1.0, 1.0, out=drum_mix)
+            np.tanh(drum_mix, out=drum_mix)
             stem_drums[offset : offset + frames] = drum_mix
 
             # Master with effects
@@ -557,7 +613,7 @@ class AudioEngine:
             master_mix = self.chorus.process(master_mix)
             master_mix = self.distortion.process(master_mix)
             master_mix *= self.master_volume
-            np.clip(master_mix, -1.0, 1.0, out=master_mix)
+            np.tanh(master_mix, out=master_mix)
             stem_master[offset : offset + frames] = master_mix
 
         self.transport.is_playing = saved_playing
@@ -596,32 +652,51 @@ class AudioEngine:
         # Process piano roll sequencer
         self.piano_roll_sequencer.process(self)
 
-        # Render active synth voices
-        mixed = np.zeros((frames, CHANNELS), dtype=np.float32)
+        # Check if anything is active (voices or transport)
+        has_active_voices = any(v.active for v in self.voices)
+        has_active_drums = any(dv.active for dv in self.drum_voices)
+        if not has_active_voices and not has_active_drums and not self.transport.is_playing:
+            outdata.fill(0)
+            return
+
+        # Render synth voices separately (will go through effects)
+        synth_mix = np.zeros((frames, CHANNELS), dtype=np.float32)
         for i, voice in enumerate(self.voices):
             if voice.active:
                 block = voice.render_block(frames)
-                mixed[:, 0] += block * voice.pan_left
-                mixed[:, 1] += block * voice.pan_right
+                reverb_send = getattr(voice, "reverb_send", 0.0)
+                delay_send = getattr(voice, "delay_send", 0.0)
+                chorus_send = getattr(voice, "chorus_send", 0.0)
+                max_send = max(reverb_send, delay_send, chorus_send)
+                dry_gain = 1.0 - max_send * 0.5
+                synth_mix[:, 0] += block * voice.pan_left * dry_gain
+                synth_mix[:, 1] += block * voice.pan_right * dry_gain
                 self._voice_ages[i] += 1
                 if voice.is_finished():
                     voice.active = False
 
-        # Render active drum voices
+        # Apply effects to synth mix only
+        synth_mix = self.eq.process(synth_mix)
+        synth_mix = self.reverb.process(synth_mix)
+        synth_mix = self.delay.process(synth_mix)
+        synth_mix = self.chorus.process(synth_mix)
+        synth_mix = self.bit_crusher.process(synth_mix)
+        synth_mix = self.distortion.process(synth_mix)
+        synth_mix = self.compressor.process(synth_mix)
+
+        # Render drum voices separately (dry, no effects)
+        drum_mix = np.zeros((frames, CHANNELS), dtype=np.float32)
         for i, dv in enumerate(self.drum_voices):
             if dv.active:
                 block = dv.render_block(frames)
-                mixed[:, 0] += block * dv.pan_left
-                mixed[:, 1] += block * dv.pan_right
+                drum_mix[:, 0] += block * dv.pan_left
+                drum_mix[:, 1] += block * dv.pan_right
                 self._drum_voice_ages[i] += 1
                 if dv.is_finished():
                     dv.active = False
 
-        # Master effects
-        mixed = self.reverb.process(mixed)
-        mixed = self.delay.process(mixed)
-        mixed = self.chorus.process(mixed)
-        mixed = self.distortion.process(mixed)
+        # Combine synth + drums
+        mixed = synth_mix + drum_mix
 
         # Master volume
         mixed *= self.master_volume
@@ -632,4 +707,4 @@ class AudioEngine:
         with contextlib.suppress(queue.Full):
             self.meter_queue.put_nowait((peak_left, peak_right))
 
-        outdata[:] = np.clip(mixed, -1.0, 1.0)
+        outdata[:] = np.tanh(mixed, dtype=np.float32)

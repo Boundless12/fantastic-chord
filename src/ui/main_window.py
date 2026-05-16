@@ -11,7 +11,10 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMessageBox,
+    QScrollArea,
+    QSplitter,
     QStatusBar,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -25,8 +28,11 @@ from .chord_panel import ChordPanel
 from .drum_panel import DrumPanel
 from .effects_panel import EffectsPanel
 from .keyboard_widget import KeyboardWidget
+from .mod_matrix_panel import ModMatrixPanel
 from .piano_roll_widget import PianoRollWidget
 from .synth_panel import SynthPanel
+from .theme import COLOR_SURFACE
+from .track_list import TrackListWidget
 from .transport import TransportWidget
 from .waveform_display import WaveformDisplay
 
@@ -49,14 +55,9 @@ class MainWindow(QMainWindow):
     drum_panel: DrumPanel
     chord_panel: ChordPanel
     effects_panel: EffectsPanel
-    _piano_roll_dock: QDockWidget
+    _track_list: TrackListWidget
     _keyboard_dock: QDockWidget
     _transport_dock: QDockWidget
-    _synth_dock: QDockWidget
-    _chord_dock: QDockWidget
-    _drum_dock: QDockWidget
-    _waveform_dock: QDockWidget
-    _effects_dock: QDockWidget
 
     def __init__(self) -> None:
         super().__init__()
@@ -73,26 +74,74 @@ class MainWindow(QMainWindow):
         self._setup_statusbar()
         self._connect_signals()
         self._setup_shortcuts()
+        self._start_audio_engine()
 
     def _setup_central(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStyleSheet(f"QSplitter::handle {{ background-color: {COLOR_SURFACE}; width: 3px; }}")
+
+        self._track_list = TrackListWidget()
+        self._track_list.set_model(self.piano_roll_model)
+        self._track_list.setMaximumWidth(180)
+        splitter.addWidget(self._track_list)
+
+        self.piano_roll_widget = PianoRollWidget(self.piano_roll_model)
+        splitter.addWidget(self.piano_roll_widget)
+
+        right_panel = self._build_right_panel_stack()
+        splitter.addWidget(right_panel)
+
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 7)
+        splitter.setStretchFactor(2, 3)
+        splitter.setSizes([160, 900, 420])
+
+        self.setCentralWidget(splitter)
+
+    def _build_right_panel_stack(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(320)
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {COLOR_SURFACE}; }}")
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        self.synth_panel = SynthPanel()
+        self.synth_panel.set_engine(self.audio_engine)
+        self.synth_panel.setMaximumHeight(380)
+        layout.addWidget(self.synth_panel)
+
+        self.chord_panel = ChordPanel()
+        self.chord_panel.set_engine(self.audio_engine)
+        layout.addWidget(self.chord_panel)
+
+        self.drum_panel = DrumPanel()
+        self.drum_panel.set_engine(self.audio_engine)
+        layout.addWidget(self.drum_panel)
+
+        self.effects_panel = EffectsPanel()
+        self.effects_panel.set_engine(self.audio_engine)
+        layout.addWidget(self.effects_panel)
+
+        self.mod_matrix_panel = ModMatrixPanel()
+        self.mod_matrix_panel.set_engine(self.audio_engine)
+        layout.addWidget(self.mod_matrix_panel)
+
+        self.waveform_display = WaveformDisplay()
+        self.waveform_display.setMinimumHeight(80)
+        self.waveform_display.setMaximumHeight(120)
+        layout.addWidget(self.waveform_display)
+
+        layout.addStretch()
+
+        scroll.setWidget(container)
+        return scroll
 
     def _setup_docks(self) -> None:
-        # Piano roll dock — center
-        self.piano_roll_widget = PianoRollWidget(self.piano_roll_model)
-        self._piano_roll_dock = QDockWidget("Piano Roll", self)
-        self._piano_roll_dock.setWidget(self.piano_roll_widget)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._piano_roll_dock)
-
-        # Keyboard dock — bottom
-        self.keyboard_widget = KeyboardWidget()
-        self._keyboard_dock = QDockWidget("Virtual Keyboard", self)
-        self._keyboard_dock.setWidget(self.keyboard_widget)
-        self._keyboard_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._keyboard_dock)
-
-        # Transport dock — top
         self.transport_widget = TransportWidget()
         self._transport_dock = QDockWidget("Transport", self)
         self._transport_dock.setWidget(self.transport_widget)
@@ -100,46 +149,11 @@ class MainWindow(QMainWindow):
         self._transport_dock.setMaximumHeight(60)
         self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, self._transport_dock)
 
-        # Synth panel dock — right
-        self.synth_panel = SynthPanel()
-        self.synth_panel.set_engine(self.audio_engine)
-        self._synth_dock = QDockWidget("Synthesizer", self)
-        self._synth_dock.setWidget(self.synth_panel)
-        self._synth_dock.setMinimumWidth(320)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._synth_dock)
-
-        # Chord panel dock — right (below synth)
-        self.chord_panel = ChordPanel()
-        self._chord_dock = QDockWidget("Chord Generator", self)
-        self._chord_dock.setWidget(self.chord_panel)
-        self._chord_dock.setMinimumWidth(340)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._chord_dock)
-
-        # Drum panel dock — right (below chord panel)
-        self.drum_panel = DrumPanel()
-        self._drum_dock = QDockWidget("Drum Machine", self)
-        self._drum_dock.setWidget(self.drum_panel)
-        self._drum_dock.setMinimumWidth(340)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._drum_dock)
-
-        # Waveform dock — right (below drum panel)
-        self.waveform_display = WaveformDisplay()
-        self._waveform_dock = QDockWidget("Oscilloscope", self)
-        self._waveform_dock.setWidget(self.waveform_display)
-        self._waveform_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._waveform_dock)
-
-        # Effects panel dock — right (bottom)
-        self.effects_panel = EffectsPanel()
-        self._effects_dock = QDockWidget("Effects Mixer", self)
-        self._effects_dock.setWidget(self.effects_panel)
-        self._effects_dock.setMinimumWidth(300)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._effects_dock)
-
-        # Initialize drum panel engine connection
-        self.drum_panel.set_engine(self.audio_engine)
-        self.chord_panel.set_engine(self.audio_engine)
-        self.effects_panel.set_engine(self.audio_engine)
+        self.keyboard_widget = KeyboardWidget()
+        self._keyboard_dock = QDockWidget("Virtual Keyboard", self)
+        self._keyboard_dock.setWidget(self.keyboard_widget)
+        self._keyboard_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._keyboard_dock)
 
     def _setup_menu(self) -> None:
         menubar = self.menuBar()
@@ -162,10 +176,6 @@ class MainWindow(QMainWindow):
         view_menu = menubar.addMenu("&View")
         view_menu.addAction("Toggle &Keyboard", self._on_toggle_keyboard)
         view_menu.addAction("Toggle &Transport", self._on_toggle_transport)
-        view_menu.addAction("Toggle &Synth Panel", self._on_toggle_synth_panel)
-        view_menu.addAction("Toggle &Drum Panel", self._on_toggle_drum_panel)
-        view_menu.addAction("Toggle &Chord Panel", self._on_toggle_chord_panel)
-        view_menu.addAction("Toggle &Effects Mixer", self._on_toggle_effects_panel)
 
         audio_menu = menubar.addMenu("&Audio")
         audio_menu.addAction("Audio &Settings...", self._on_audio_settings)
@@ -192,9 +202,23 @@ class MainWindow(QMainWindow):
         # Chord panel → piano roll
         self.chord_panel.progression_changed.connect(self._on_progression_pushed)
 
+        # Track list → model → piano roll refresh
+        self._track_list.active_track_changed.connect(self._on_track_changed)
+        self._track_list.track_types_changed.connect(self._on_track_types_changed)
+        self.piano_roll_model.active_track_changed.connect(self._on_active_track_changed)
+
     def _setup_shortcuts(self) -> None:
         QShortcut(Qt.Key.Key_Space, self, self._on_transport_play)
         QShortcut(Qt.Key.Key_Escape, self, self._on_transport_stop)
+
+    def _start_audio_engine(self) -> None:
+        try:
+            self.audio_engine.start()
+            logger.info("Audio engine started")
+            self.statusBar().showMessage("Audio engine running — 44100 Hz, 512 samples")
+        except Exception as e:
+            logger.error(f"Failed to start audio engine: {e}")
+            self.statusBar().showMessage(f"Audio error: {e}")
 
     def _on_transport_play(self) -> None:
         self.sequencer_transport.is_playing = not self.sequencer_transport.is_playing
@@ -206,19 +230,30 @@ class MainWindow(QMainWindow):
     def _on_transport_stop(self) -> None:
         self.sequencer_transport.is_playing = False
         self.sequencer_transport.reset()
+        self.transport_widget._play_btn.setText("▶")
+        self.transport_widget._play_btn.setChecked(False)
+        self.transport_widget._is_playing = False
         self.drum_panel.stop_polling()
+        self.audio_engine.panic()
+        self.drum_panel._preview_running = False
+        self.chord_panel._preview_running = False
 
     def _on_bpm_changed(self, bpm: float) -> None:
         self.sequencer_transport.set_bpm(bpm)
 
     def _on_progression_pushed(self, progression: ProgressionData) -> None:
-        """Convert a ProgressionData to Note objects and push to piano roll."""
+        """Push chord progression to a NEW track (FL Studio style)."""
 
-        # Clear existing pattern
+        # Check if current track is empty — if so reuse it, otherwise create new
+        current_pattern = self.piano_roll_model.current_pattern
+        if current_pattern.notes:
+            self.piano_roll_model.add_track()
+            self.piano_roll_model.set_active_track(len(self.piano_roll_model.tracks) - 1)
+            self._track_list._rebuild_list()
+            self._track_list._list.setCurrentRow(self.piano_roll_model.active_track_index)
+
         pattern = self.piano_roll_model.current_pattern
         pattern.notes.clear()
-
-        # Ensure piano roll sequencer is enabled
         self.audio_engine.enable_piano_roll_playback(True)
 
         start_beat = 0.0
@@ -235,10 +270,19 @@ class MainWindow(QMainWindow):
         pattern.length_beats = max(start_beat, 4.0)
         self.piano_roll_widget.refresh_notes()
 
-        # Push pattern to engine for playback
-        self.audio_engine.set_piano_roll_pattern(pattern)
+        self.audio_engine.set_piano_roll_pattern(pattern, self.piano_roll_model.active_track_index)
+        self._track_list.track_types_changed.emit()
 
-        self.statusBar().showMessage(f"Pushed {len(progression.chords)} chords to piano roll")
+        self.sequencer_transport.reset()
+        self.sequencer_transport.is_playing = True
+        self.transport_widget._play_btn.setText("⏸")
+        self.transport_widget._play_btn.setChecked(True)
+        self.transport_widget._is_playing = True
+        self.drum_panel.start_polling()
+
+        self.statusBar().showMessage(
+            f"Pushed {len(progression.chords)} chords → {self.piano_roll_model.current_track.name} — playing"
+        )
 
     def _on_keyboard_note_on(self, note: int, velocity: int) -> None:
         self.audio_engine.note_on(note, velocity)
@@ -253,9 +297,16 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"CC {cc_number} mapped to {param_path}")
 
     def _on_new_project(self) -> None:
-        self.piano_roll_model.current_pattern.notes.clear()
+        self.piano_roll_model.set_active_track(0)
+        for track in self.piano_roll_model.tracks:
+            for pattern in track.patterns:
+                pattern.notes.clear()
+        self.piano_roll_model.tracks = self.piano_roll_model.tracks[:1]
+        self.piano_roll_model.tracks[0].patterns.clear()
         self.piano_roll_model.current_pattern.length_beats = 16.0
         self.piano_roll_widget.refresh_notes()
+        self._track_list._rebuild_list()
+        self._track_list._list.setCurrentRow(0)
         self.sequencer_transport.reset()
         self.statusBar().showMessage("New project created")
 
@@ -267,18 +318,24 @@ class MainWindow(QMainWindow):
             return
         data = MidiFileIO.load(filepath)
         if data.tracks:
-            pattern = self.piano_roll_model.current_pattern
-            pattern.notes.clear()
-            for track in data.tracks:
-                beat_duration = 60.0 / data.bpm
-                for midi_note in track.notes:
+            beat_duration = 60.0 / data.bpm
+            for t_idx, midi_track in enumerate(data.tracks):
+                if t_idx >= len(self.piano_roll_model.tracks):
+                    self.piano_roll_model.add_track()
+                self.piano_roll_model.set_active_track(t_idx)
+                pattern = self.piano_roll_model.current_pattern
+                pattern.notes.clear()
+                for midi_note in midi_track.notes:
                     self.piano_roll_model.insert_note(
                         pitch=midi_note.pitch,
                         start=midi_note.start_time / beat_duration if beat_duration else 0,
                         duration=midi_note.duration / beat_duration if beat_duration else 0.5,
                         velocity=midi_note.velocity,
                     )
+            self.piano_roll_model.set_active_track(0)
             self.piano_roll_widget.refresh_notes()
+            self._track_list._rebuild_list()
+            self._track_list._list.setCurrentRow(0)
             self.statusBar().showMessage(f"MIDI loaded: {filepath}")
 
     def _on_save_midi(self) -> None:
@@ -320,7 +377,7 @@ class MainWindow(QMainWindow):
             return
         bpm = float(self.transport_widget._bpm_spin.value())
         success = MidiExporter.export_project(
-            self.piano_roll_model.current_pattern,
+            self.piano_roll_model,
             self.drum_panel._sequencer.get_pattern(),
             bpm,
             filepath,
@@ -338,23 +395,22 @@ class MainWindow(QMainWindow):
         if self.piano_roll_model.redo():
             self.piano_roll_widget.refresh_notes()
 
+    def _on_track_changed(self, index: int) -> None:
+        self.piano_roll_widget.refresh_notes()
+        self.statusBar().showMessage(f"Active track: {self.piano_roll_model.current_track.name}")
+
+    def _on_track_types_changed(self) -> None:
+        types = self._track_list._get_track_types()
+        self.audio_engine.set_track_types(types)
+
+    def _on_active_track_changed(self, index: int) -> None:
+        self.piano_roll_widget.refresh_notes()
+
     def _on_toggle_keyboard(self) -> None:
         self._keyboard_dock.setVisible(not self._keyboard_dock.isVisible())
 
     def _on_toggle_transport(self) -> None:
         self._transport_dock.setVisible(not self._transport_dock.isVisible())
-
-    def _on_toggle_synth_panel(self) -> None:
-        self._synth_dock.setVisible(not self._synth_dock.isVisible())
-
-    def _on_toggle_drum_panel(self) -> None:
-        self._drum_dock.setVisible(not self._drum_dock.isVisible())
-
-    def _on_toggle_chord_panel(self) -> None:
-        self._chord_dock.setVisible(not self._chord_dock.isVisible())
-
-    def _on_toggle_effects_panel(self) -> None:
-        self._effects_dock.setVisible(not self._effects_dock.isVisible())
 
     def _on_audio_settings(self) -> None:
         devices = AudioEngine.list_devices()

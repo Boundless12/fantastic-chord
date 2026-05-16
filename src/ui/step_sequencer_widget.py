@@ -138,6 +138,8 @@ class StepSequencerWidget(QWidget):
         layout.addWidget(grid)
 
     def _on_step_toggled(self, drum_type: str, col: int, checked: bool) -> None:
+        btn = self._buttons[drum_type][col]
+        btn._apply_style(active=checked, is_current=(col == self._current_step))
         self.pattern_changed.emit()
 
     def get_pattern(self) -> DrumPattern:

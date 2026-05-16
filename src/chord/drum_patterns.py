@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+
 from ..sequencer.drum_pattern import DRUM_TYPES, DrumPattern
 from .styles import DrumPatternRef
 
@@ -21,6 +23,99 @@ LABEL_TO_STEPS: dict[str, list[int]] = {
     "downbeat": [0],
     "build": [4, 8, 10, 12, 13, 14, 15],
 }
+
+# Style templates: (kick_template, snare_template, hh_template)
+STYLE_TEMPLATES: dict[str, tuple[list[int], list[int], list[int], list[int]]] = {
+    "house": ([0, 4, 8, 12], [4, 12], [0, 2, 4, 6, 8, 10, 12, 14], [0, 4, 8, 12]),
+    "techno": ([0, 1, 2, 3, 8, 9, 10, 11], [4, 12], [0, 3, 6, 9, 12, 15], [4, 12]),
+    "trap": ([0, 6, 8, 14], [4, 12], [0, 2, 4, 6, 8, 10, 12, 14], [0, 4, 8, 12]),
+    "dubstep": ([0, 8], [4], [0, 3, 6, 8, 10, 12, 15], []),
+    "drum_bass": ([0, 3, 6, 9, 11, 14], [4, 12], [0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15], [4, 12]),
+    "pop": ([0, 4, 8, 12], [4, 12], [0, 2, 4, 6, 8, 10, 12, 14], [4, 12]),
+    "lofi": ([0, 5, 8], [4, 12], [0, 3, 6, 9, 12], []),
+}
+
+
+class DrumPatternGenerator:
+    """Algorithmic drum pattern generator with style templates and complexity control."""
+
+    @staticmethod
+    def generate(style: str = "house", complexity: float = 0.5, steps: int = 16) -> DrumPattern:
+        """Generate a complete drum pattern for the given style and complexity.
+
+        Args:
+            style: Style name (house, techno, trap, dubstep, drum_bass, pop, lofi).
+            complexity: 0.0 (sparse) to 1.0 (dense fills).
+            steps: Number of steps (default 16).
+
+        Returns:
+            A populated DrumPattern.
+        """
+        pattern = DrumPattern(name=f"Auto {style.title()}", steps=steps)
+        parts = pattern.get_parts()
+
+        kick_tmpl, snare_tmpl, hh_tmpl, clap_tmpl = STYLE_TEMPLATES.get(style, STYLE_TEMPLATES["house"])
+
+        # Kick: increasingly add ghost notes with complexity
+        kick_steps = set(kick_tmpl)
+        if complexity > 0.5:
+            extra_kicks = [s for s in range(steps) if s not in kick_steps and s % 2 == 0]
+            kick_steps.update(random.sample(extra_kicks, min(len(extra_kicks), int((complexity - 0.5) * 6))))
+
+        # Snare: add occasional fills
+        snare_steps = set(snare_tmpl)
+        if complexity > 0.6:
+            fill_candidates = [s for s in range(steps) if s not in snare_steps and s >= 12]
+            snare_steps.update(random.sample(fill_candidates, min(len(fill_candidates), int((complexity - 0.5) * 3))))
+
+        # Hi-hat: increase density
+        hh_steps = set(hh_tmpl)
+        if complexity < 0.3:
+            hh_steps = {s for s in hh_steps if s % 4 == 0}
+        elif complexity > 0.7:
+            hh_steps.update(s for s in range(steps) if s % 2 == 1 and random.random() < complexity - 0.4)
+
+        # Clap: layer on snares
+        clap_steps = set(clap_tmpl)
+        if complexity > 0.5:
+            clap_steps.update(snare_steps)
+
+        # Open hi-hat: sparse accents
+        hh_open_steps: set[int] = set()
+        if complexity > 0.3:
+            hh_open_steps.add(random.choice([s for s in range(steps) if s % 2 == 0]))
+
+        # Apply to pattern
+        for s in kick_steps:
+            if 0 <= s < steps:
+                parts["kick"][s].active = True
+                parts["kick"][s].velocity = 1.0
+
+        for s in snare_steps:
+            if 0 <= s < steps:
+                parts["snare"][s].active = True
+                parts["snare"][s].velocity = 0.9 if s >= 12 else 1.0
+
+        for s in hh_steps:
+            if 0 <= s < steps:
+                parts["hh_closed"][s].active = True
+                parts["hh_closed"][s].velocity = 0.7
+
+        for s in clap_steps:
+            if 0 <= s < steps:
+                parts["clap"][s].active = True
+                parts["clap"][s].velocity = 0.85
+
+        for s in hh_open_steps:
+            if 0 <= s < steps:
+                parts["hh_open"][s].active = True
+                parts["hh_open"][s].velocity = 0.8
+
+        return pattern
+
+    @staticmethod
+    def get_available_styles() -> list[str]:
+        return sorted(STYLE_TEMPLATES.keys())
 
 
 class DrumPatternParser:

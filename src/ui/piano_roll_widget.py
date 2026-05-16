@@ -72,6 +72,11 @@ class PianoRollWidget(QGraphicsView):
     _drag_note_index: int
     _drag_start_pos: tuple[float, float]
     _resize_right_edge: bool
+    _selected_indices: set[int]
+    _clipboard: list[Note]
+    _rubber_band_rect: QGraphicsRectItem | None
+    _rubber_band_origin: QPointF | None
+    _drag_origins: dict[int, tuple[float, int]]  # note_index -> (start_beat, pitch)
 
     def __init__(self, model: PianoRollModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -87,6 +92,11 @@ class PianoRollWidget(QGraphicsView):
         self._drag_note_index = -1
         self._drag_start_pos = (0.0, 0.0)
         self._resize_right_edge = True
+        self._selected_indices = set()
+        self._clipboard = []
+        self._rubber_band_rect = None
+        self._rubber_band_origin = None
+        self._drag_origins = {}
 
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
@@ -169,69 +179,126 @@ class PianoRollWidget(QGraphicsView):
             painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
 
     def refresh_notes(self) -> None:
-        """Redraw all note rectangles from the model."""
+        """Redraw all note rectangles from all tracks with per-track colors."""
         for item in self._scene.items():
             if isinstance(item, NoteGraphicsItem):
                 self._scene.removeItem(item)
 
-        pattern = self._model.current_pattern
-        for i, note in enumerate(pattern.notes):
-            if note.pitch < NOTE_MIN or note.pitch > NOTE_MAX:
+        active_idx = self._model.active_track_index
+        for track_idx, track in enumerate(self._model.tracks):
+            if track_idx != active_idx:
                 continue
-            x = self._beat_to_x(note.start_time)
-            y = self._pitch_to_y(note.pitch)
-            w = note.duration * self._pixels_per_beat
-            h = self._note_height
+            if not track.patterns:
+                continue
+            pattern = track.patterns[0]
+            track_color = QColor(track.color)
+            for i, note in enumerate(pattern.notes):
+                if note.pitch < NOTE_MIN or note.pitch > NOTE_MAX:
+                    continue
+                x = self._beat_to_x(note.start_time)
+                y = self._pitch_to_y(note.pitch)
+                w = note.duration * self._pixels_per_beat
+                h = self._note_height
 
-            item = NoteGraphicsItem(note, i, self._track_color)
-            item.setRect(QRectF(x, y, max(w, 4), h))
-            item.setZValue(10)
-            self._scene.addItem(item)
+                color = QColor(track_color)
+                color.setAlpha(180)
+                item = NoteGraphicsItem(note, i, color)
+                item.setRect(QRectF(x, y, max(w, 4), h))
+                item.setZValue(10)
+                self._scene.addItem(item)
+
+    def _note_item_at(self, scene_pos: QPointF) -> NoteGraphicsItem | None:
+        for item in self._scene.items(scene_pos):
+            if isinstance(item, NoteGraphicsItem):
+                return item
+        return None
+
+    def _select_note(self, index: int) -> None:
+        self._selected_indices.add(index)
+
+    def _deselect_all(self) -> None:
+        self._selected_indices.clear()
+        for item in self._scene.items():
+            if isinstance(item, NoteGraphicsItem):
+                item.setSelected(False)
+
+    def _select_notes_in_rect(self, rect: QRectF) -> None:
+        for item in self._scene.items(rect):
+            if isinstance(item, NoteGraphicsItem):
+                item.setSelected(True)
+                self._selected_indices.add(item.note_index)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         scene_pos = self.mapToScene(event.pos())
         x, y = scene_pos.x(), scene_pos.y()
-
         beat = self._x_to_beat(x)
         pitch = self._y_to_pitch(y)
+        note_item = self._note_item_at(scene_pos)
 
-        # Check if clicking on a note's right edge for resize
-        items = self._scene.items(scene_pos)
-        note_item = None
-        for item in items:
-            if isinstance(item, NoteGraphicsItem):
-                note_item = item
-                break
+        ctrl = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        shift = event.modifiers() & Qt.KeyboardModifier.ShiftModifier
 
         if note_item and event.button() == Qt.MouseButton.LeftButton:
             rect = note_item.rect()
-            right_edge_x = rect.right()
-            if abs(x - right_edge_x) < 6:
+            # Resize from right edge
+            if abs(x - rect.right()) < 8:
                 self._drag_mode = "resize"
                 self._drag_note_index = note_item.note_index
                 self._drag_start_pos = (x, y)
-                self._resize_right_edge = True
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
                 return
 
+            # Ctrl/Shift click: toggle or add to selection
+            if ctrl or shift:
+                if note_item.note_index in self._selected_indices:
+                    self._selected_indices.discard(note_item.note_index)
+                    note_item.setSelected(False)
+                else:
+                    self._selected_indices.add(note_item.note_index)
+                    note_item.setSelected(True)
+                return
+
+            # Click on unselected note: select only it
+            if note_item.note_index not in self._selected_indices:
+                self._deselect_all()
+                self._selected_indices.add(note_item.note_index)
+                note_item.setSelected(True)
+
+            # Start drag (single or multi)
             self._drag_mode = "move"
             self._drag_note_index = note_item.note_index
             self._drag_start_pos = (beat, pitch)
+            self._drag_origins = {}
+            for idx in self._selected_indices:
+                n = self._model.current_pattern.notes[idx]
+                self._drag_origins[idx] = (n.start_time, n.pitch)
             self.setCursor(Qt.CursorShape.SizeAllCursor)
             return
 
-        if event.button() == Qt.MouseButton.RightButton and note_item:
-            idx = note_item.note_index
-            self._model.delete_note(idx)
-            self.refresh_notes()
-            self.note_changed.emit()
+        if event.button() == Qt.MouseButton.RightButton:
+            if note_item:
+                self._deselect_all()
+                note_item.setSelected(True)
+                self._selected_indices.add(note_item.note_index)
+                # Delete all selected
+                for idx in sorted(self._selected_indices, reverse=True):
+                    self._model.delete_note(idx)
+                self._selected_indices.clear()
+                self.refresh_notes()
+                self.note_changed.emit()
             return
 
+        # Click on empty space: start rubber band or deselect + insert
         if event.button() == Qt.MouseButton.LeftButton and not note_item:
-            quantized_beat = round(beat / self._model.grid) * self._model.grid
-            self._model.insert_note(pitch, quantized_beat, DEFAULT_NOTE_DURATION)
-            self.refresh_notes()
-            self.note_changed.emit()
+            if not ctrl and not shift:
+                self._deselect_all()
+            self._drag_mode = "rubber_band"
+            self._rubber_band_origin = scene_pos
+            pen = QPen(QColor("#7c3aed"), 1, Qt.PenStyle.DashLine)
+            self._rubber_band_rect = QGraphicsRectItem()
+            self._rubber_band_rect.setPen(pen)
+            self._rubber_band_rect.setZValue(100)
+            self._scene.addItem(self._rubber_band_rect)
             return
 
         super().mousePressEvent(event)
@@ -240,11 +307,27 @@ class PianoRollWidget(QGraphicsView):
         scene_pos = self.mapToScene(event.pos())
         x, y = scene_pos.x(), scene_pos.y()
 
+        if self._drag_mode == "rubber_band" and self._rubber_band_origin and self._rubber_band_rect:
+            r = QRectF(self._rubber_band_origin, scene_pos).normalized()
+            self._rubber_band_rect.setRect(r)
+            return
+
         if self._drag_mode == "move":
             beat = self._x_to_beat(x)
             pitch = self._y_to_pitch(y)
-            quantized_beat = round(beat / self._model.grid) * self._model.grid
-            self._model.move_note(self._drag_note_index, quantized_beat, pitch)
+            dbeat = round((beat - self._drag_start_pos[0]) / self._model.grid) * self._model.grid
+            dpitch = pitch - self._drag_start_pos[1]
+
+            if self._selected_indices and self._drag_origins:
+                for idx in sorted(self._selected_indices):
+                    if idx in self._drag_origins:
+                        orig_start, orig_pitch = self._drag_origins[idx]
+                        new_start = max(0.0, orig_start + dbeat)
+                        new_pitch = max(0, min(127, orig_pitch + int(dpitch)))
+                        self._model.move_note(idx, new_start, new_pitch)
+            else:
+                quantized_beat = round(beat / self._model.grid) * self._model.grid
+                self._model.move_note(self._drag_note_index, quantized_beat, pitch)
             self.refresh_notes()
             self.note_changed.emit()
             return
@@ -262,6 +345,24 @@ class PianoRollWidget(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._drag_mode == "rubber_band" and self._rubber_band_rect:
+            r = self._rubber_band_rect.rect()
+            self._scene.removeItem(self._rubber_band_rect)
+            self._rubber_band_rect = None
+            self._rubber_band_origin = None
+            if r.width() > 4 or r.height() > 4:
+                self._select_notes_in_rect(r)
+            else:
+                # Single click: insert note
+                scene_pos = self.mapToScene(event.pos())
+                x = scene_pos.x()
+                beat = self._x_to_beat(x)
+                pitch = self._y_to_pitch(scene_pos.y())
+                quantized_beat = round(beat / self._model.grid) * self._model.grid
+                self._model.insert_note(pitch, quantized_beat, DEFAULT_NOTE_DURATION)
+                self.refresh_notes()
+                self.note_changed.emit()
+
         self._dragging = False
         self._drag_mode = ""
         self._drag_note_index = -1
@@ -269,22 +370,83 @@ class PianoRollWidget(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        ctrl = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
-            selected = self._scene.selectedItems()
-            for item in selected:
-                if isinstance(item, NoteGraphicsItem):
-                    self._model.delete_note(item.note_index)
+            for idx in sorted(self._selected_indices, reverse=True):
+                self._model.delete_note(idx)
+            self._selected_indices.clear()
             self.refresh_notes()
             self.note_changed.emit()
             return
 
-        if event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        if ctrl and event.key() == Qt.Key.Key_C:
+            self._clipboard = [
+                self._model.current_pattern.notes[i]
+                for i in sorted(self._selected_indices)
+                if i < len(self._model.current_pattern.notes)
+            ]
+            return
+
+        if ctrl and event.key() == Qt.Key.Key_V:
+            if not self._clipboard:
+                return
+            min_start = min(n.start_time for n in self._clipboard)
+            offset = round(self._model.transport.position_beats / self._model.grid) * self._model.grid - min_start
+            self._deselect_all()
+            for note in self._clipboard:
+                self._model.insert_note(
+                    pitch=note.pitch,
+                    start=max(0.0, note.start_time + offset),
+                    duration=note.duration,
+                    velocity=note.velocity,
+                )
+                idx = len(self._model.current_pattern.notes) - 1
+                self._selected_indices.add(idx)
+            self.refresh_notes()
+            self.note_changed.emit()
+            return
+
+        if ctrl and event.key() == Qt.Key.Key_D:
+            self._clipboard = [
+                self._model.current_pattern.notes[i]
+                for i in sorted(self._selected_indices)
+                if i < len(self._model.current_pattern.notes)
+            ]
+            if self._clipboard:
+                self._deselect_all()
+                for note in self._clipboard:
+                    self._model.insert_note(
+                        pitch=note.pitch,
+                        start=note.start_time + note.duration + 0.125,
+                        duration=note.duration,
+                        velocity=note.velocity,
+                    )
+                    idx = len(self._model.current_pattern.notes) - 1
+                    self._selected_indices.add(idx)
+            self.refresh_notes()
+            self.note_changed.emit()
+            return
+
+        if ctrl and event.key() == Qt.Key.Key_A:
+            pattern = self._model.current_pattern
+            self._deselect_all()
+            for i in range(len(pattern.notes)):
+                self._selected_indices.add(i)
+                # Find and select the graphics item
+                for item in self._scene.items():
+                    if isinstance(item, NoteGraphicsItem) and item.note_index == i:
+                        item.setSelected(True)
+                        break
+            return
+
+        if ctrl and event.key() == Qt.Key.Key_Z:
             if self._model.undo():
                 self.refresh_notes()
                 self.note_changed.emit()
             return
 
-        if event.key() == Qt.Key.Key_Y and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        if ctrl and event.key() == Qt.Key.Key_Y:
             if self._model.redo():
                 self.refresh_notes()
                 self.note_changed.emit()

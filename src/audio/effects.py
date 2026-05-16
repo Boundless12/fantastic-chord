@@ -21,7 +21,7 @@ class Reverb:
     damping: float
     wet_dry: float
 
-    def __init__(self, room_size: float = 0.5, damping: float = 0.5, wet_dry: float = 0.3) -> None:
+    def __init__(self, room_size: float = 0.5, damping: float = 0.5, wet_dry: float = 0.12) -> None:
         self.room_size = room_size
         self.damping = damping
         self.wet_dry = wet_dry
@@ -37,32 +37,31 @@ class Reverb:
             x = np.column_stack([x, x])
         frames = x.shape[0]
         out = np.zeros((frames, 2), dtype=np.float32)
+        idx = np.arange(frames, dtype=np.int32)
 
         for ch in range(2):
             ch_in = x[:, ch]
             comb_sum = np.zeros(frames, dtype=np.float32)
             for i in range(4):
                 buf = self._comb_buffers[i]
+                dlen = self._comb_delays[i]
                 pos = self._comb_positions[i]
-                delay_len = self._comb_delays[i]
-                for n in range(frames):
-                    delayed = buf[pos]
-                    buf[pos] = ch_in[n] + self.room_size * 0.8 * delayed
-                    comb_sum[n] += delayed
-                    pos = (pos + 1) % delay_len
-                self._comb_positions[i] = pos
+                rpos = (idx + pos) % dlen
+                delayed = buf[rpos].copy()
+                buf[rpos] = np.asarray(ch_in + self.room_size * 0.8 * delayed, dtype=np.float32)
+                comb_sum += delayed
+                self._comb_positions[i] = (pos + frames) % dlen
 
             ap_in = comb_sum * (1.0 - self.damping * 0.5) + ch_in * self.damping * 0.5
             for i in range(2):
                 buf = self._ap_buffers[i]
+                dlen = self._ap_delays[i]
                 pos = self._ap_positions[i]
-                delay_len = self._ap_delays[i]
-                for n in range(frames):
-                    delayed = buf[pos]
-                    buf[pos] = ap_in[n] + delayed * 0.5
-                    ap_in[n] = delayed - ap_in[n] * 0.5
-                    pos = (pos + 1) % delay_len
-                self._ap_positions[i] = pos
+                rpos = (idx + pos) % dlen
+                delayed = buf[rpos].copy()
+                buf[rpos] = np.asarray(ap_in + delayed * 0.5, dtype=np.float32)
+                ap_in = delayed - ap_in * 0.5
+                self._ap_positions[i] = (pos + frames) % dlen
             out[:, ch] = ap_in
 
         return (1.0 - self.wet_dry) * x + self.wet_dry * out
@@ -81,7 +80,7 @@ class Delay:
     wet_dry: float
 
     def __init__(
-        self, time_left: float = 0.25, time_right: float = 0.375, feedback: float = 0.4, wet_dry: float = 0.3
+        self, time_left: float = 0.25, time_right: float = 0.375, feedback: float = 0.2, wet_dry: float = 0.12
     ) -> None:
         self.time_left = time_left
         self.time_right = time_right
@@ -99,21 +98,25 @@ class Delay:
         if x.ndim == 1:
             x = np.column_stack([x, x])
         frames = x.shape[0]
-        out = np.zeros((frames, 2), dtype=np.float32)
         buf_size = len(self._buffer_left)
 
-        for n in range(frames):
-            dl_left = self._buffer_left[(self._pos_left - self._delay_len_left) % buf_size]
-            dl_right = self._buffer_right[(self._pos_right - self._delay_len_right) % buf_size]
+        ridx_left = (np.arange(frames, dtype=np.int32) + self._pos_left - self._delay_len_left) % buf_size
+        ridx_right = (np.arange(frames, dtype=np.int32) + self._pos_right - self._delay_len_right) % buf_size
+        widx_left = (np.arange(frames, dtype=np.int32) + self._pos_left) % buf_size
+        widx_right = (np.arange(frames, dtype=np.int32) + self._pos_right) % buf_size
 
-            self._buffer_left[self._pos_left] = x[n, 0] + dl_right * self.feedback
-            self._buffer_right[self._pos_right] = x[n, 1] + dl_left * self.feedback
-            self._pos_left = (self._pos_left + 1) % buf_size
-            self._pos_right = (self._pos_right + 1) % buf_size
+        dl_left = self._buffer_left[ridx_left]
+        dl_right = self._buffer_right[ridx_right]
 
-            out[n, 0] = (1.0 - self.wet_dry) * x[n, 0] + self.wet_dry * dl_left
-            out[n, 1] = (1.0 - self.wet_dry) * x[n, 1] + self.wet_dry * dl_right
+        self._buffer_left[widx_left] = np.asarray(x[:, 0] + dl_right * self.feedback, dtype=np.float32)
+        self._buffer_right[widx_right] = np.asarray(x[:, 1] + dl_left * self.feedback, dtype=np.float32)
 
+        self._pos_left = (self._pos_left + frames) % buf_size
+        self._pos_right = (self._pos_right + frames) % buf_size
+
+        out = np.zeros((frames, 2), dtype=np.float32)
+        out[:, 0] = (1.0 - self.wet_dry) * x[:, 0] + self.wet_dry * dl_left
+        out[:, 1] = (1.0 - self.wet_dry) * x[:, 1] + self.wet_dry * dl_right
         return out
 
 
@@ -127,7 +130,7 @@ class Chorus:
     _lfo_phase: float
     _pos: int
 
-    def __init__(self, rate: float = 0.5, depth: float = 0.01, wet_dry: float = 0.5) -> None:
+    def __init__(self, rate: float = 0.5, depth: float = 0.01, wet_dry: float = 0.2) -> None:
         self.rate = rate
         self.depth = depth
         self.wet_dry = wet_dry
@@ -139,24 +142,27 @@ class Chorus:
         if x.ndim == 1:
             x = np.column_stack([x, x])
         frames = x.shape[0]
-        out = np.zeros((frames, 2), dtype=np.float32)
         buf_size = len(self._buffer)
 
-        for n in range(frames):
-            lfo = np.sin(self._lfo_phase, dtype=np.float32)
-            delay_samples = int(self.depth * SAMPLE_RATE * (1.0 + lfo))
-            delay_samples = max(1, min(delay_samples, buf_size - 1))
+        lfo_center = np.sin(self._lfo_phase + np.pi * self.rate * frames / SAMPLE_RATE, dtype=np.float32)
+        delay_samples = int(self.depth * SAMPLE_RATE * (1.0 + float(lfo_center)))
+        delay_samples = max(1, min(delay_samples, buf_size - 1))
 
-            for ch in range(2):
-                read_pos = (self._pos - delay_samples) % buf_size
-                delayed = self._buffer[read_pos]
-                self._buffer[self._pos] = x[n, ch]
-                out[n, ch] = (1.0 - self.wet_dry) * x[n, ch] + self.wet_dry * delayed
+        idx = np.arange(frames, dtype=np.int32)
+        widx = (idx + self._pos) % buf_size
+        ridx = (widx - delay_samples) % buf_size
 
-            self._pos = (self._pos + 1) % buf_size
-            self._lfo_phase += 2.0 * np.pi * self.rate / SAMPLE_RATE
-            if self._lfo_phase >= 2.0 * np.pi:
-                self._lfo_phase -= 2.0 * np.pi
+        delayed = self._buffer[ridx].copy()
+        self._buffer[widx] = x[:, 1]
+
+        out = np.zeros((frames, 2), dtype=np.float32)
+        out[:, 0] = (1.0 - self.wet_dry) * x[:, 0] + self.wet_dry * delayed
+        out[:, 1] = (1.0 - self.wet_dry) * x[:, 1] + self.wet_dry * delayed
+
+        self._pos = (self._pos + frames) % buf_size
+        self._lfo_phase += 2.0 * np.pi * self.rate * frames / SAMPLE_RATE
+        if self._lfo_phase >= 2.0 * np.pi:
+            self._lfo_phase -= 2.0 * np.pi
 
         return out
 
@@ -167,7 +173,7 @@ class Distortion:
     drive: float
     tone: float
 
-    def __init__(self, drive: float = 0.5, tone: float = 0.5) -> None:
+    def __init__(self, drive: float = 0.0, tone: float = 0.5) -> None:
         self.drive = drive
         self.tone = tone
 
