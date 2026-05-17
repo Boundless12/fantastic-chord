@@ -179,7 +179,7 @@ class Distortion:
 
     def process(self, x: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
         gain = 1.0 + self.drive * 20.0
-        result = np.tanh(x * gain, dtype=np.float32)
+        result = np.tanh(x * gain)
         return np.asarray(result, dtype=np.float32)
 
 
@@ -195,20 +195,20 @@ class BitCrusher:
     def __init__(self, bit_depth: float = 8.0, rate_reduction: float = 1.0) -> None:
         self.bit_depth = bit_depth
         self.rate_reduction = rate_reduction
-        self._sample_counter = 0
-        self._last_sample = np.zeros(2, dtype=np.float32)
 
     def process(self, x: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
         if x.ndim == 1:
             x = np.column_stack([x, x])
-        out = np.zeros_like(x)
+        levels = np.float32(2.0**self.bit_depth)
         hold_samples = max(1, int(self.rate_reduction))
 
-        for n in range(x.shape[0]):
-            if self._sample_counter % hold_samples == 0:
-                levels = 2.0**self.bit_depth
-                self._last_sample = np.round(x[n] * levels) / levels
-            out[n] = self._last_sample
-            self._sample_counter += 1
+        # Bit crush: quantize
+        crushed = np.round(x * levels) / levels
+
+        # Sample-and-hold: take every hold_samples-th sample, then repeat
+        n_frames = x.shape[0]
+        sample_indices = np.arange(n_frames) // hold_samples * hold_samples
+        np.clip(sample_indices, 0, n_frames - 1, out=sample_indices)
+        out = crushed[sample_indices]
 
         return np.asarray(out, dtype=np.float32)

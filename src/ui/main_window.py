@@ -11,10 +11,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMessageBox,
-    QScrollArea,
     QSplitter,
     QStatusBar,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -23,6 +21,7 @@ from ..chord.theory import ProgressionData
 from ..export.midi_exporter import MidiExporter
 from ..export.wav_exporter import WavExporter
 from ..sequencer.piano_roll import PianoRollModel
+from ..sequencer.track import InstrumentType
 from ..sequencer.transport import Transport
 from .chord_panel import ChordPanel
 from .drum_panel import DrumPanel
@@ -94,52 +93,49 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 7)
         splitter.setStretchFactor(2, 3)
-        splitter.setSizes([160, 900, 420])
+        splitter.setSizes([160, 880, 440])
 
         self.setCentralWidget(splitter)
 
     def _build_right_panel_stack(self) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setMinimumWidth(320)
-        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {COLOR_SURFACE}; }}")
+        from PySide6.QtWidgets import QTabWidget
 
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        tabs = QTabWidget()
+        tabs.setMinimumWidth(320)
+        tabs.setStyleSheet(
+            f"""
+            QTabWidget::pane {{ border: none; background: {COLOR_SURFACE}; }}
+            QTabBar::tab {{ color: #a0a0c0; background: #252538; padding: 6px 12px; border: none; }}
+            QTabBar::tab:selected {{ color: #e0e0ff; background: {COLOR_SURFACE}; }}
+        """
+        )
 
         self.synth_panel = SynthPanel()
         self.synth_panel.set_engine(self.audio_engine)
-        self.synth_panel.setMaximumHeight(380)
-        layout.addWidget(self.synth_panel)
+        tabs.addTab(self.synth_panel, "Synth")
 
         self.chord_panel = ChordPanel()
         self.chord_panel.set_engine(self.audio_engine)
-        layout.addWidget(self.chord_panel)
+        tabs.addTab(self.chord_panel, "Chords")
 
         self.drum_panel = DrumPanel()
         self.drum_panel.set_engine(self.audio_engine)
-        layout.addWidget(self.drum_panel)
+        tabs.addTab(self.drum_panel, "Drums")
 
         self.effects_panel = EffectsPanel()
         self.effects_panel.set_engine(self.audio_engine)
-        layout.addWidget(self.effects_panel)
+        tabs.addTab(self.effects_panel, "FX")
 
         self.mod_matrix_panel = ModMatrixPanel()
         self.mod_matrix_panel.set_engine(self.audio_engine)
-        layout.addWidget(self.mod_matrix_panel)
+        tabs.addTab(self.mod_matrix_panel, "Mod")
 
         self.waveform_display = WaveformDisplay()
         self.waveform_display.setMinimumHeight(80)
         self.waveform_display.setMaximumHeight(120)
-        layout.addWidget(self.waveform_display)
+        tabs.addTab(self.waveform_display, "Wave")
 
-        layout.addStretch()
-
-        scroll.setWidget(container)
-        return scroll
+        return tabs
 
     def _setup_docks(self) -> None:
         self.transport_widget = TransportWidget()
@@ -153,7 +149,9 @@ class MainWindow(QMainWindow):
         self._keyboard_dock = QDockWidget("Virtual Keyboard", self)
         self._keyboard_dock.setWidget(self.keyboard_widget)
         self._keyboard_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable)
+        self._keyboard_dock.setMinimumHeight(100)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._keyboard_dock)
+        self._keyboard_dock.setVisible(True)
 
     def _setup_menu(self) -> None:
         menubar = self.menuBar()
@@ -202,6 +200,9 @@ class MainWindow(QMainWindow):
         # Chord panel → piano roll
         self.chord_panel.progression_changed.connect(self._on_progression_pushed)
 
+        # Drum panel → piano roll
+        self.drum_panel.drum_to_piano_roll.connect(self._on_drum_to_piano_roll)
+
         # Track list → model → piano roll refresh
         self._track_list.active_track_changed.connect(self._on_track_changed)
         self._track_list.track_types_changed.connect(self._on_track_types_changed)
@@ -224,8 +225,10 @@ class MainWindow(QMainWindow):
         self.sequencer_transport.is_playing = not self.sequencer_transport.is_playing
         if self.sequencer_transport.is_playing:
             self.drum_panel.start_polling()
+            self.piano_roll_widget.start_playhead_polling()
         else:
             self.drum_panel.stop_polling()
+            self.piano_roll_widget.stop_playhead_polling()
 
     def _on_transport_stop(self) -> None:
         self.sequencer_transport.is_playing = False
@@ -234,6 +237,7 @@ class MainWindow(QMainWindow):
         self.transport_widget._play_btn.setChecked(False)
         self.transport_widget._is_playing = False
         self.drum_panel.stop_polling()
+        self.piano_roll_widget.stop_playhead_polling()
         self.audio_engine.panic()
         self.drum_panel._preview_running = False
         self.chord_panel._preview_running = False
@@ -269,6 +273,7 @@ class MainWindow(QMainWindow):
 
         pattern.length_beats = max(start_beat, 4.0)
         self.piano_roll_widget.refresh_notes()
+        self.piano_roll_widget.update_scene_rect()
 
         self.audio_engine.set_piano_roll_pattern(pattern, self.piano_roll_model.active_track_index)
         self._track_list.track_types_changed.emit()
@@ -283,6 +288,49 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Pushed {len(progression.chords)} chords → {self.piano_roll_model.current_track.name} — playing"
         )
+
+    def _on_drum_to_piano_roll(self, drum_pattern: object) -> None:
+        from ..sequencer.drum_pattern import GM_DRUM_MAP, DrumPattern
+        from ..sequencer.pattern import Note
+
+        if not isinstance(drum_pattern, DrumPattern):
+            return
+
+        self.piano_roll_model.add_track()
+        new_idx = len(self.piano_roll_model.tracks) - 1
+        self.piano_roll_model.set_active_track(new_idx)
+        self._track_list._rebuild_list()
+        self._track_list._list.setCurrentRow(new_idx)
+
+        track = self.piano_roll_model.current_track
+        track.name = f"Drums {new_idx}"
+        track.instrument_type = InstrumentType.DRUMS
+
+        pattern = self.piano_roll_model.current_pattern
+        pattern.notes.clear()
+        pattern.name = drum_pattern.name
+        pattern.length_beats = 4.0
+
+        step_beats = 4.0 / drum_pattern.steps
+        parts = drum_pattern.get_parts()
+        for drum_type, steps in parts.items():
+            pitch = GM_DRUM_MAP.get(drum_type, 0)
+            for i, step in enumerate(steps):
+                if step.active:
+                    pattern.notes.append(
+                        Note(
+                            pitch=pitch,
+                            velocity=int(step.velocity * 127),
+                            start_time=i * step_beats,
+                            duration=step_beats * 0.8,
+                        )
+                    )
+
+        self.piano_roll_widget.refresh_notes()
+        self.piano_roll_widget.update_scene_rect()
+        self.piano_roll_widget.scroll_to_pitch_range(36, 50)
+        self._track_list.track_types_changed.emit()
+        self.statusBar().showMessage(f"Pushed drum pattern → {track.name} ({len(pattern.notes)} hits)")
 
     def _on_keyboard_note_on(self, note: int, velocity: int) -> None:
         self.audio_engine.note_on(note, velocity)

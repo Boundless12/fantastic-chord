@@ -70,7 +70,7 @@ class Compressor:
 
 
 class EQ:
-    """3-band parametric equalizer using BiquadFilter stages."""
+    """3-band parametric equalizer using BiquadFilter stages (stereo-safe)."""
 
     low_gain: float
     mid_gain: float
@@ -80,9 +80,7 @@ class EQ:
     _enabled: bool
 
     _sample_rate: int
-    _low_shelf: object  # BiquadFilter
-    _mid_peak: object  # BiquadFilter
-    _high_shelf: object  # BiquadFilter
+    _dirty: bool
 
     def __init__(self, sample_rate: int = 44100) -> None:
         self._sample_rate = sample_rate
@@ -92,42 +90,72 @@ class EQ:
         self.mid_freq = 1000.0
         self.mid_q = 0.7
         self._enabled = True
+        self._dirty = True
 
         from .filter import BiquadFilter
 
-        self._low_shelf = BiquadFilter(sample_rate, "lowshelf", 200.0, 0.0)
-        self._mid_peak = BiquadFilter(sample_rate, "peaking", self.mid_freq, self.mid_q)
-        self._high_shelf = BiquadFilter(sample_rate, "highshelf", 8000.0, 0.0)
+        self._low_L = BiquadFilter(sample_rate, "lowshelf", 200.0, 0.0)
+        self._low_R = BiquadFilter(sample_rate, "lowshelf", 200.0, 0.0)
+        self._mid_L = BiquadFilter(sample_rate, "peaking", self.mid_freq, self.mid_q)
+        self._mid_R = BiquadFilter(sample_rate, "peaking", self.mid_freq, self.mid_q)
+        self._high_L = BiquadFilter(sample_rate, "highshelf", 8000.0, 0.0)
+        self._high_R = BiquadFilter(sample_rate, "highshelf", 8000.0, 0.0)
+
+    def set_params(self, low: float | None = None, mid: float | None = None, high: float | None = None) -> None:
+        if low is not None and low != self.low_gain:
+            self.low_gain = low
+            self._dirty = True
+        if mid is not None and mid != self.mid_gain:
+            self.mid_gain = mid
+            self._dirty = True
+        if high is not None and high != self.high_gain:
+            self.high_gain = high
+            self._dirty = True
 
     def _update_filters(self) -> None:
+        if not self._dirty:
+            return
+        self._dirty = False
         from .filter import BiquadFilter
 
-        low = self._low_shelf
-        if isinstance(low, BiquadFilter):
-            low.cutoff = 200.0
-            low.resonance = max(0.0, min(1.0, (self.low_gain + 15.0) / 30.0))
-            low.recompute_coeffs()
+        for ch_filt in (self._low_L, self._low_R):
+            if isinstance(ch_filt, BiquadFilter):
+                ch_filt.cutoff = 200.0
+                ch_filt.resonance = max(0.0, min(1.0, (self.low_gain + 15.0) / 30.0))
+                ch_filt.recompute_coeffs()
 
-        mid = self._mid_peak
-        if isinstance(mid, BiquadFilter):
-            mid.cutoff = self.mid_freq
-            mid.resonance = max(0.0, min(1.0, abs(self.mid_gain) / 15.0))
-            mid.recompute_coeffs()
+        for ch_filt in (self._mid_L, self._mid_R):
+            if isinstance(ch_filt, BiquadFilter):
+                ch_filt.cutoff = self.mid_freq
+                ch_filt.resonance = max(0.0, min(1.0, abs(self.mid_gain) / 15.0))
+                ch_filt.recompute_coeffs()
 
-        high = self._high_shelf
-        if isinstance(high, BiquadFilter):
-            high.cutoff = 8000.0
-            high.resonance = max(0.0, min(1.0, (self.high_gain + 15.0) / 30.0))
-            high.recompute_coeffs()
+        for ch_filt in (self._high_L, self._high_R):
+            if isinstance(ch_filt, BiquadFilter):
+                ch_filt.cutoff = 8000.0
+                ch_filt.resonance = max(0.0, min(1.0, (self.high_gain + 15.0) / 30.0))
+                ch_filt.recompute_coeffs()
 
     def process(self, x: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
         if not self._enabled:
             return x
-        self._update_filters()
-        out = x
-        for filt in (self._low_shelf, self._mid_peak, self._high_shelf):
-            from .filter import BiquadFilter
+        if self.low_gain == 0.0 and self.mid_gain == 0.0 and self.high_gain == 0.0:
+            return x
 
-            if isinstance(filt, BiquadFilter):
-                out = filt.process(out)
-        return out
+        self._update_filters()
+        from .filter import BiquadFilter
+
+        if x.ndim == 2:
+            left = x[:, 0].copy()
+            right = x[:, 1].copy()
+            for flt_l, flt_r in ((self._low_L, self._low_R), (self._mid_L, self._mid_R), (self._high_L, self._high_R)):
+                if isinstance(flt_l, BiquadFilter):
+                    left = flt_l.process(left)
+                    right = flt_r.process(right)
+            return np.column_stack([left, right])
+        else:
+            out = x
+            for flt in (self._low_L, self._mid_L, self._high_L):
+                if isinstance(flt, BiquadFilter):
+                    out = flt.process(out)
+            return out

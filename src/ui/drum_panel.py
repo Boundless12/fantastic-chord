@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -27,6 +28,8 @@ from .step_sequencer_widget import StepSequencerWidget
 class DrumPanel(QWidget):
     """Drum panel combining pads, step sequencer, kit selector, and pattern presets."""
 
+    drum_to_piano_roll = Signal(object)  # emits DrumPattern
+
     _engine: AudioEngine | None
     _transport: Transport | None
     _poll_timer: QTimer
@@ -41,6 +44,7 @@ class DrumPanel(QWidget):
     _gen_complexity: QSlider
     _gen_btn: QPushButton
     _preview_loop_cb: QCheckBox
+    _push_btn: QPushButton
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -54,7 +58,15 @@ class DrumPanel(QWidget):
         self._setup_poll_timer()
 
     def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
@@ -114,6 +126,12 @@ class DrumPanel(QWidget):
         preview_layout.addWidget(self._preview_loop_cb)
 
         preview_layout.addStretch()
+
+        self._push_btn = QPushButton("→ Piano Roll")
+        self._push_btn.setToolTip("Push current drum pattern to piano roll as MIDI notes")
+        self._push_btn.clicked.connect(self._on_push_to_piano_roll)
+        preview_layout.addWidget(self._push_btn)
+
         seq_layout.addLayout(preview_layout)
 
         layout.addWidget(seq_group, 1)
@@ -167,6 +185,9 @@ class DrumPanel(QWidget):
         gen_layout.addWidget(self._gen_btn)
 
         layout.addWidget(gen_group)
+
+        scroll.setWidget(container)
+        outer.addWidget(scroll)
 
     def _setup_poll_timer(self) -> None:
         self._poll_timer = QTimer(self)
@@ -293,6 +314,10 @@ class DrumPanel(QWidget):
         self._preview_running = False
         self._preview_btn.setVisible(True)
         self._stop_preview_btn.setVisible(False)
+
+    def _on_push_to_piano_roll(self) -> None:
+        pattern = self._sequencer.get_pattern()
+        self.drum_to_piano_roll.emit(pattern)
 
     # -- Public API --
 

@@ -1,0 +1,19 @@
+{
+  "name": "Serum Jaws Supersaw",
+  "category": "lead",
+  "osc1": {"waveform": "wavetable", "octave": 0, "semitones": 0, "detune_cents": 0.0, "pulse_width": 0.5, "phase": 0.0, "wavetable_index": 3, "fm_source": "none", "fm_amount": 0.0},
+  "osc2": {"waveform": "wavetable", "octave": 0, "semitones": 0, "detune_cents": 10.0, "pulse_width": 0.5, "phase": 0.0, "wavetable_index": 3, "fm_source": "none", "fm_amount": 0.0},
+  "mixer": {"osc1_level": 0.85, "osc2_level": 0.6, "noise_level": 0.04, "sub_osc_level": 0.2, "ring_mod": 0.0},
+  "sub_osc": {"enabled": true, "waveform": "saw", "octave": -1, "level": 0.2},
+  "noise": {"level": 0.04, "color": 0.5, "stereo_spread": 0.2},
+  "filter": {"filter_type": "lowpass", "cutoff": 10000.0, "resonance": 0.1, "key_track": 0.2, "drive": 0.08, "env_amount": 0.2, "velocity_to_cutoff": 0.1, "cutoff_link": 1.0, "slope": "24db"},
+  "amp_env": {"attack": 0.01, "decay": 0.3, "sustain": 0.7, "release": 0.25, "velocity_to_amp": 0.2},
+  "filter_env": {"attack": 0.02, "decay": 0.4, "sustain": 0.15, "release": 0.25, "velocity_to_env": 0.05},
+  "lfo1": {"waveform": "sine", "rate": 0.3, "rate_sync": false, "rate_sync_subdiv": "1/4", "depth": 0.08, "phase": 0.0, "fade_in": 0.0, "target": "osc_pitch", "key_sync": true, "one_shot": false},
+  "lfo2": {"waveform": "triangle", "rate": 0.22, "rate_sync": false, "rate_sync_subdiv": "1/4", "depth": 0.1, "phase": 0.0, "fade_in": 0.0, "target": "filter_cutoff", "key_sync": true, "one_shot": false},
+  "effects": {"reverb_send": 0.3, "delay_send": 0.2, "chorus_send": 0.4, "distortion_drive": 0.05},
+  "portamento": {"time": 0.04, "mode": "off", "polyphony": "poly", "bend_range": 2, "unison_detune": 0.2},
+  "unison": {"voices": 7, "detune": 0.3, "spread": 0.8},
+  "sub_osc_level": 0.2, "sub_octave": -1,
+  "mod_slots": []
+}

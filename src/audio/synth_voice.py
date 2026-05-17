@@ -15,8 +15,49 @@ from .envelope import ADSR
 from .filter import BiquadFilter
 from .lfo import LFO
 from .mod_matrix import ModMatrix
-from .oscillator import NoiseOscillator, Oscillator
+from .oscillator import NoiseOscillator, Oscillator, WavetableOscillator
 from .patch import Patch
+from .wavetable import (
+    TABLE_SIZE,
+    generate_saw_table,
+    generate_sine_table,
+    generate_square_table,
+    generate_triangle_table,
+    generate_wavetable_set,
+)
+
+WAVETABLE_INDEX_MAP = [
+    "",  # 0 = none
+    "analog_saw",
+    "digital_saw",
+    "jaws",
+    "pwm_square",
+    "sqr_saw",
+    "wavetable_sweep",
+    "organ",
+    "vocal",
+    "tubes",
+    "growl",
+]
+
+_WAVEFORM_TABLE_CACHE: dict[str, list[npt.NDArray[np.float32]]] = {}
+
+
+def _get_or_create_tables(waveform: str) -> list[npt.NDArray[np.float32]]:
+    if waveform in _WAVEFORM_TABLE_CACHE:
+        return _WAVEFORM_TABLE_CACHE[waveform]
+    if waveform == "sine":
+        tables = [generate_sine_table(TABLE_SIZE)]
+    elif waveform == "saw":
+        tables = [generate_saw_table(TABLE_SIZE)]
+    elif waveform == "square":
+        tables = [generate_square_table(TABLE_SIZE)]
+    elif waveform == "triangle":
+        tables = [generate_triangle_table(TABLE_SIZE)]
+    else:
+        tables = [generate_sine_table(TABLE_SIZE)]
+    _WAVEFORM_TABLE_CACHE[waveform] = tables
+    return tables
 
 
 class SynthVoice:
@@ -29,8 +70,8 @@ class SynthVoice:
     pan_right: float
     _sample_rate: int
 
-    osc1: Oscillator
-    osc2: Oscillator
+    osc1: WavetableOscillator
+    osc2: WavetableOscillator
     noise_osc: NoiseOscillator
     filter: BiquadFilter
     amp_env: ADSR
@@ -87,8 +128,8 @@ class SynthVoice:
         self.pan_left = 0.707
         self.pan_right = 0.707
 
-        self.osc1 = Oscillator(sample_rate, "saw")
-        self.osc2 = Oscillator(sample_rate, "sine")
+        self.osc1 = WavetableOscillator(sample_rate, _get_or_create_tables("saw"))
+        self.osc2 = WavetableOscillator(sample_rate, _get_or_create_tables("sine"))
         self.noise_osc = NoiseOscillator(sample_rate)
         self.filter = BiquadFilter(sample_rate)
         self.amp_env = ADSR(sample_rate)
@@ -191,15 +232,31 @@ class SynthVoice:
     def is_finished(self) -> bool:
         return self.amp_env.is_finished()
 
+    def load_wavetable(self, wavetable_name: str, osc_num: int = 1) -> None:
+        tables = generate_wavetable_set(wavetable_name, frame_count=64, size=TABLE_SIZE)
+        if not tables:
+            return
+        osc = self.osc1 if osc_num == 1 else self.osc2
+        osc.tables = [t.astype(np.float32) for t in tables]
+        osc.table_size = len(tables[0])
+        osc.waveform = "wavetable"
+        osc.wavetable_position = 0.0
+
     def load_patch(self, patch: Patch) -> None:
-        self.osc1.waveform = patch.osc1.waveform
-        self.osc2.waveform = patch.osc2.waveform
+        self._set_osc_waveform(self.osc1, patch.osc1.waveform)
+        self._set_osc_waveform(self.osc2, patch.osc2.waveform)
         self._osc1_octave = patch.osc1.octave
         self._osc1_semitones = patch.osc1.semitones
         self._osc1_detune_cents = patch.osc1.detune_cents
         self._osc2_octave = patch.osc2.octave
         self._osc2_semitones = patch.osc2.semitones
         self._osc2_detune_cents = patch.osc2.detune_cents
+
+        # Wavetable loading
+        if patch.osc1.wavetable_index > 0 and patch.osc1.wavetable_index < len(WAVETABLE_INDEX_MAP):
+            self.load_wavetable(WAVETABLE_INDEX_MAP[patch.osc1.wavetable_index], osc_num=1)
+        if patch.osc2.wavetable_index > 0 and patch.osc2.wavetable_index < len(WAVETABLE_INDEX_MAP):
+            self.load_wavetable(WAVETABLE_INDEX_MAP[patch.osc2.wavetable_index], osc_num=2)
 
         self.osc1_level = patch.mixer.osc1_level
         self.osc2_level = patch.mixer.osc2_level
@@ -303,12 +360,18 @@ class SynthVoice:
             elif parts[1] == "waveform":
                 self._sub_waveform = str(value) if isinstance(value, str) else "sine"
 
+    def _set_osc_waveform(self, osc: WavetableOscillator, waveform: str) -> None:
+        osc.waveform = waveform
+        if waveform != "wavetable":
+            osc.tables = _get_or_create_tables(waveform)
+            osc.table_size = len(osc.tables[0])
+
     def _apply_osc_param(self, osc_num: int, field: str, value: float) -> None:
         osc = self.osc1 if osc_num == 1 else self.osc2
         if field == "waveform_int":
             waveforms = ["sine", "saw", "square", "triangle", "noise"]
             idx = min(max(int(value), 0), len(waveforms) - 1)
-            osc.waveform = waveforms[idx]
+            self._set_osc_waveform(osc, waveforms[idx])
         elif field == "octave":
             oct_val = int(value) - 3 if value <= 6 else int(value)  # e.g. range -3..+3 sent as float
             if osc_num == 1:
@@ -341,6 +404,10 @@ class SynthVoice:
         elif field == "warp_amount":
             if hasattr(osc, "set_warp"):
                 osc.set_warp(getattr(osc, "warp_mode", "none"), max(0.0, min(1.0, value)))
+        elif field == "wavetable_index":
+            idx = int(value)
+            if 0 < idx < len(WAVETABLE_INDEX_MAP):
+                self.load_wavetable(WAVETABLE_INDEX_MAP[idx], osc_num=osc_num)
 
         # Recompute frequency with updated offsets
         if self.note > 0 and field in ("octave", "semitones", "detune_cents"):
@@ -431,16 +498,14 @@ class SynthVoice:
         elif field == "distortion_drive":
             self.distortion_drive = max(0.0, min(1.0, value))
 
-    def render_block(self, frames: int, sub_blocks: int = 16) -> npt.NDArray[np.float32]:
+    def render_block(self, frames: int, sub_blocks: int = 8) -> npt.NDArray[np.float32]:
         """Render one block of mono audio with sub-block modulation smoothing."""
         if not self.active:
             return np.zeros(frames, dtype=np.float32)
 
-        # Compute sub-block sizes, distributing remainder
         base_sf = frames // sub_blocks
         remainder = frames % sub_blocks
 
-        # Portamento glide — apply once for the whole block
         if self._portamento_time > 0.0 and abs(self._target_frequency - self._current_frequency) > 0.01:
             glide_samples = int(self._portamento_time * self._sample_rate)
             step = (self._target_frequency - self._current_frequency) / max(glide_samples, 1)
@@ -448,13 +513,11 @@ class SynthVoice:
             if abs(self._current_frequency - self._target_frequency) < 0.01:
                 self._current_frequency = self._target_frequency
 
-        # Pre-compute modulation signals for the full block
         lfo1_out = self.lfo1.process(frames)
         lfo2_out = self.lfo2.process(frames)
         fe_env = self.filter_env.render_block(frames)
         amp_env_out = self.amp_env.render_block(frames)
 
-        # Evaluate modulation matrix
         mod_context: dict[str, float] = {
             "lfo1": float(np.mean(lfo1_out)),
             "lfo2": float(np.mean(lfo2_out)),
@@ -472,76 +535,61 @@ class SynthVoice:
         use_lfo_pitch = self.lfo1.target == "osc_pitch" and self.lfo1.depth > 0.0
         use_filter_env = self.filter.env_amount != 0.0
 
-        output_blocks: list[npt.NDArray[np.float32]] = []
+        # Pre-allocate output buffer (avoid np.concatenate)
+        output = np.empty(frames, dtype=np.float32)
 
         s0 = 0
-        actual_blocks = sub_blocks if base_sf > 0 else frames
-        for sb in range(actual_blocks):
-            sf = base_sf + (1 if sb < remainder else 0) if base_sf > 0 else 1
-            if sf == 0:
-                sf = base_sf
+        for sb in range(sub_blocks):
+            sf = base_sf + (1 if sb < remainder else 0)
             s1 = s0 + sf
 
-            # Apply modulation matrix: cutoff offset
             cutoff_mod = mod_values.get("cutoff", 0.0)
             base_cutoff_mod = base_cutoff * (2.0 ** (cutoff_mod * 4.0)) if abs(cutoff_mod) > 0.001 else base_cutoff
-
-            # Apply modulation matrix: volume
             vol_mod = mod_values.get("volume", 0.0)
             vel_mod = float(self.velocity) * max(0.0, min(2.0, 1.0 + vol_mod))
 
-            # Apply sub-block LFO pitch modulation
             if use_lfo_pitch:
                 pm = float(np.mean(lfo1_out[s0:s1])) * 12.0
-                self.osc1.set_frequency(base_freq * (2.0 ** (pm / 12.0)))
+                freq = base_freq * (2.0 ** (pm / 12.0))
+                self.osc1.set_frequency(freq)
             else:
                 self.osc1.set_frequency(base_freq)
             self.osc2.set_frequency(base_freq)
 
-            # Generate oscillator outputs with unison
             uv = max(1, self.unison_voices)
-            unison_gain = 1.0 / np.sqrt(uv)
-            mixed = np.zeros(sf, dtype=np.float32)
+            unison_gain = np.float32(1.0 / np.sqrt(uv))
 
-            # Sub oscillator
-            if self.sub_osc_level > 0.001:
-                sub_out = self._sub_osc.generate(sf) * 0.5 * self.sub_osc_level
-                mixed += sub_out
+            # Build mixed signal in-place
+            mixed = self.osc1.generate(sf) * (unison_gain * 0.5 * self.osc1_level)
+            mixed += self.osc2.generate(sf) * (unison_gain * 0.5 * self.osc2_level)
 
-            # Noise (not per-unison-voice)
-            if self.noise_level > 0.001:
-                mixed += self.noise_osc.generate(sf) * 0.3 * self.noise_level
-
-            # Main oscillators with unison
-            for vi in range(uv):
+            for vi in range(1, uv):
                 v_detune = self._unison_detunes[vi] / 100.0 if vi < len(self._unison_detunes) else 0.0
-                uf1 = base_freq * (2.0 ** (v_detune / 12.0))
-                uf2 = base_freq * (2.0 ** (v_detune / 12.0))
-                self.osc1.set_frequency(uf1)
-                self.osc2.set_frequency(uf2)
-                u_osc1 = self.osc1.generate(sf) * 0.5 * self.osc1_level * unison_gain
-                u_osc2 = self.osc2.generate(sf) * 0.5 * self.osc2_level * unison_gain
-                mixed += u_osc1 + u_osc2
+                uf = base_freq * (2.0 ** (v_detune / 12.0))
+                self.osc1.set_frequency(uf)
+                self.osc2.set_frequency(uf)
+                mixed += self.osc1.generate(sf) * (unison_gain * 0.5 * self.osc1_level)
+                mixed += self.osc2.generate(sf) * (unison_gain * 0.5 * self.osc2_level)
 
-            # Restore base frequency for next sub-block
             self.osc1.set_frequency(base_freq)
             self.osc2.set_frequency(base_freq)
 
-            # Apply sub-block filter envelope modulation (with mod matrix cutoff)
+            if self.sub_osc_level > 0.001:
+                mixed += self._sub_osc.generate(sf) * 0.5 * self.sub_osc_level
+            if self.noise_level > 0.001:
+                mixed += self.noise_osc.generate(sf) * 0.3 * self.noise_level
+
             if use_filter_env:
                 em = float(np.mean(fe_env[s0:s1])) * self.filter.env_amount * base_cutoff_mod
                 self.filter.set_cutoff(max(20.0, min(20000.0, base_cutoff_mod + em)))
             else:
                 self.filter.set_cutoff(base_cutoff_mod)
 
-            filtered = self.filter.process(mixed.astype(np.float32))
-
-            # Apply amp envelope with mod matrix volume
-            output_blocks.append(filtered * amp_env_out[s0:s1] * vel_mod)
+            filtered = self.filter.process(mixed)
+            output[s0:s1] = filtered * amp_env_out[s0:s1] * vel_mod
 
             s0 = s1
 
-        # Restore filter cutoff
         self.filter.set_cutoff(base_cutoff)
 
         if not self.amp_env.is_idle():
@@ -549,4 +597,4 @@ class SynthVoice:
         else:
             self.active = False
 
-        return np.concatenate(output_blocks).astype(np.float32)
+        return output

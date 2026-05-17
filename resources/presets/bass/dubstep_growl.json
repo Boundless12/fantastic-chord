@@ -1,0 +1,22 @@
+{
+  "name": "Dubstep Growl",
+  "category": "bass",
+  "osc1": {"waveform": "wavetable", "octave": -1, "semitones": 0, "detune_cents": 0.0, "pulse_width": 0.5, "phase": 0.0, "wavetable_index": 10, "fm_source": "none", "fm_amount": 0.0},
+  "osc2": {"waveform": "wavetable", "octave": -2, "semitones": 0, "detune_cents": 0.0, "pulse_width": 0.5, "phase": 0.0, "wavetable_index": 9, "fm_source": "none", "fm_amount": 0.0},
+  "mixer": {"osc1_level": 0.9, "osc2_level": 0.4, "noise_level": 0.05, "sub_osc_level": 0.0, "ring_mod": 0.0},
+  "sub_osc": {"enabled": false, "waveform": "sine", "octave": -2, "level": 0.0},
+  "noise": {"level": 0.05, "color": 0.7, "stereo_spread": 0.2},
+  "filter": {"filter_type": "lowpass", "cutoff": 400.0, "resonance": 0.75, "key_track": 0.6, "drive": 0.3, "env_amount": 0.7, "velocity_to_cutoff": 0.4, "cutoff_link": 1.0, "slope": "24db"},
+  "amp_env": {"attack": 0.005, "decay": 0.25, "sustain": 0.5, "release": 0.2, "velocity_to_amp": 0.4},
+  "filter_env": {"attack": 0.005, "decay": 0.35, "sustain": 0.05, "release": 0.15, "velocity_to_env": 0.3},
+  "lfo1": {"waveform": "saw_down", "rate": 0.125, "rate_sync": true, "rate_sync_subdiv": "1/8", "depth": 0.5, "phase": 0.0, "fade_in": 0.0, "target": "filter_cutoff", "key_sync": true, "one_shot": false},
+  "lfo2": {"waveform": "sample_hold", "rate": 0.5, "rate_sync": true, "rate_sync_subdiv": "1/16", "depth": 0.0, "phase": 0.0, "fade_in": 0.0, "target": "none", "key_sync": true, "one_shot": false},
+  "effects": {"reverb_send": 0.05, "delay_send": 0.1, "chorus_send": 0.1, "distortion_drive": 0.45},
+  "portamento": {"time": 0.02, "mode": "always", "polyphony": "mono", "bend_range": 24, "unison_detune": 0.2},
+  "unison": {"voices": 3, "detune": 0.2, "spread": 0.4},
+  "sub_osc_level": 0.0, "sub_octave": -1,
+  "mod_slots": [
+    {"source": "lfo2", "destination": "osc1_wt_position", "amount": 0.7},
+    {"source": "filter_env", "destination": "osc1_wt_position", "amount": 0.4}
+  ]
+}

@@ -707,4 +707,5 @@ class AudioEngine:
         with contextlib.suppress(queue.Full):
             self.meter_queue.put_nowait((peak_left, peak_right))
 
-        outdata[:] = np.tanh(mixed, dtype=np.float32)
+        np.tanh(mixed, out=mixed)
+        outdata[:] = mixed

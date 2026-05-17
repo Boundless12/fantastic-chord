@@ -2,12 +2,14 @@
 
 
 Direct Form I topology with coefficients recomputed on parameter change.
+Processing vectorized via scipy.signal.lfilter (C implementation).
 """
 
 from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
+from scipy.signal import lfilter
 
 from .constants import PI_2
 
@@ -34,6 +36,7 @@ class BiquadFilter:
     _x2: float
     _y1: float
     _y2: float
+    _zi: npt.NDArray[np.float64]
 
     def __init__(
         self, sample_rate: int, filter_type: str = "lowpass", cutoff: float = 20000.0, resonance: float = 0.0
@@ -52,6 +55,7 @@ class BiquadFilter:
         self._x2 = 0.0
         self._y1 = 0.0
         self._y2 = 0.0
+        self._zi = np.zeros(4, dtype=np.float64)
         self.recompute_coeffs()
 
     def set_type(self, name: str) -> None:
@@ -140,11 +144,14 @@ class BiquadFilter:
         self._a1 = a1 * a0_inv
         self._a2 = a2 * a0_inv
 
+        self._zi = np.zeros(4, dtype=np.float64)
+
     def reset(self) -> None:
         self._x1 = 0.0
         self._x2 = 0.0
         self._y1 = 0.0
         self._y2 = 0.0
+        self._zi = np.zeros(4, dtype=np.float64)
 
     def process_sample(self, x: float) -> float:
         y = self._b0 * x + self._b1 * self._x1 + self._b2 * self._x2 - self._a1 * self._y1 - self._a2 * self._y2
@@ -155,22 +162,27 @@ class BiquadFilter:
         return y
 
     def process(self, x: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
-        """Process an audio block. Returns same-shape float32 array."""
-        out = np.empty_like(x)
-        for i in range(len(x)):
-            out[i] = self.process_sample(float(x[i]))
-        return out
+        """Process an audio block via scipy lfilter (C implementation)."""
+        b = np.array([self._b0, self._b1, self._b2], dtype=np.float64)
+        a = np.array([1.0, self._a1, self._a2], dtype=np.float64)
+        zi = self._zi[:2].copy()
+        out, zf = lfilter(b, a, x.astype(np.float64), zi=zi)
+        self._zi[:2] = zf
+        return np.asarray(out, dtype=np.float32)
 
 
 class StateVariableFilter(BiquadFilter):
     """State-variable filter with smoother cutoff modulation.
 
     Uses Chamberlin topology for better behavior under rapid parameter changes.
+    Overrides process() with per-sample loop since lfilter uses different topology.
     """
 
     _low: float
     _band: float
     _high: float
+    _f: float
+    _q: float
 
     def __init__(
         self, sample_rate: int, filter_type: str = "lowpass", cutoff: float = 20000.0, resonance: float = 0.0
@@ -208,3 +220,9 @@ class StateVariableFilter(BiquadFilter):
             return self._high + self._low
         else:
             return self._low
+
+    def process(self, x: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        out = np.empty_like(x)
+        for i in range(len(x)):
+            out[i] = self.process_sample(float(x[i]))
+        return out

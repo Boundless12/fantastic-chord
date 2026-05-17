@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -10,6 +10,7 @@ from PySide6.QtGui import (
     QMouseEvent,
     QPainter,
     QPen,
+    QPolygonF,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (
@@ -98,6 +99,11 @@ class PianoRollWidget(QGraphicsView):
         self._rubber_band_origin = None
         self._drag_origins = {}
 
+        self._playhead_beat: float = 0.0
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(30)
+        self._poll_timer.timeout.connect(self._poll_playhead)
+
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
@@ -109,10 +115,17 @@ class PianoRollWidget(QGraphicsView):
 
     def _setup_scene(self) -> None:
         self._scene.setBackgroundBrush(QBrush(QColor(COLOR_SURFACE)))
-        total_beats = 32.0
+        total_beats = self._compute_total_beats()
         total_pitch_height = (NOTE_MAX - NOTE_MIN + 1) * self._note_height
         scene_width = self._key_width + total_beats * self._pixels_per_beat
         self._scene.setSceneRect(0, 0, scene_width, total_pitch_height)
+
+    def _compute_total_beats(self) -> float:
+        pattern = self._model.current_pattern
+        if pattern and pattern.notes:
+            max_end = max((n.start_time + n.duration for n in pattern.notes), default=0.0)
+            return max(32.0, max_end + 8.0)
+        return 32.0
 
     def _beat_to_x(self, beat: float) -> float:
         return self._key_width + beat * self._pixels_per_beat
@@ -163,7 +176,8 @@ class PianoRollWidget(QGraphicsView):
                 )
 
         # Vertical beat lines
-        total_beats = 32.0
+        scene_rect = self._scene.sceneRect()
+        total_beats = max(32.0, (scene_rect.width() - self._key_width) / self._pixels_per_beat)
         for beat in range(int(total_beats * 4) + 1):
             b = beat / 4.0
             x = self._beat_to_x(b)
@@ -177,6 +191,48 @@ class PianoRollWidget(QGraphicsView):
                 pen = QPen(QColor("#2a2a3a"), 1, Qt.PenStyle.DotLine)
             painter.setPen(pen)
             painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
+
+    def _poll_playhead(self) -> None:
+        transport = self._model.transport
+        if not transport.is_playing:
+            return
+        self._playhead_beat = transport.position_beats
+        playhead_x = self._beat_to_x(self._playhead_beat)
+        viewport_rect = self.viewport().rect()
+        if playhead_x > self.horizontalScrollBar().value() + viewport_rect.width() * 0.8:
+            self.horizontalScrollBar().setValue(int(playhead_x - viewport_rect.width() * 0.3))
+        self.viewport().update()
+
+    def start_playhead_polling(self) -> None:
+        self._playhead_beat = 0.0
+        self._poll_timer.start()
+
+    def stop_playhead_polling(self) -> None:
+        self._poll_timer.stop()
+        self._playhead_beat = 0.0
+        self.viewport().update()
+
+    def drawForeground(self, painter: QPainter, rect: QRectF | QRect) -> None:
+        if self._playhead_beat <= 0.0:
+            return
+        x = self._beat_to_x(self._playhead_beat)
+        if x < rect.left() or x > rect.right():
+            return
+        pen = QPen(QColor("#ffffff"), 2, Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
+        triangle_size = 8.0
+        painter.setBrush(QColor("#ffffff"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPolygon(
+            QPolygonF(
+                [
+                    QPointF(x, rect.top()),
+                    QPointF(x - triangle_size, rect.top() + triangle_size),
+                    QPointF(x + triangle_size, rect.top() + triangle_size),
+                ]
+            )
+        )
 
     def refresh_notes(self) -> None:
         """Redraw all note rectangles from all tracks with per-track colors."""
@@ -460,12 +516,19 @@ class PianoRollWidget(QGraphicsView):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             factor = 1.1 if delta > 0 else 0.9
             self._pixels_per_beat = max(10.0, min(200.0, self._pixels_per_beat * factor))
-            self._update_scene_rect()
+            self.update_scene_rect()
             self.refresh_notes()
         else:
             super().wheelEvent(event)
 
-    def _update_scene_rect(self) -> None:
-        total_beats = 32.0
+    def update_scene_rect(self) -> None:
+        total_beats = self._compute_total_beats()
         total_height = (NOTE_MAX - NOTE_MIN + 1) * self._note_height
         self._scene.setSceneRect(0, 0, self._key_width + total_beats * self._pixels_per_beat, total_height)
+
+    def scroll_to_pitch_range(self, min_pitch: int, max_pitch: int) -> None:
+        y_top = self._pitch_to_y(max_pitch)
+        y_bot = self._pitch_to_y(min_pitch) + self._note_height
+        view_h = self.viewport().height()
+        center_y = (y_top + y_bot) / 2.0
+        self.verticalScrollBar().setValue(int(center_y - view_h / 2))
