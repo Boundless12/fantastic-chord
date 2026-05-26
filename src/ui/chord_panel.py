@@ -252,7 +252,7 @@ class ChordPanel(QWidget):
         self._progressions.clear()
 
     def _preview_progression(self, progression: ProgressionData) -> None:
-        """Trigger each chord in the progression through the engine as a preview."""
+        """Preview chord progression using piano voice."""
         if self._engine is None:
             return
 
@@ -269,14 +269,14 @@ class ChordPanel(QWidget):
                 if not self._preview_running:
                     break
                 for pitch in chord.notes:
-                    engine.note_on(pitch, 80)
+                    engine.note_on_piano(pitch, 80)
                 _time.sleep(chord.duration * beat_duration * 0.8)
                 if not self._preview_running:
                     for pitch in chord.notes:
-                        engine.note_off(pitch)
+                        engine.note_off_piano(pitch)
                     break
                 for pitch in chord.notes:
-                    engine.note_off(pitch)
+                    engine.note_off_piano(pitch)
                 _time.sleep(chord.duration * beat_duration * 0.2)
             self._preview_running = False
 

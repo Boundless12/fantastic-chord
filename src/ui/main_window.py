@@ -7,12 +7,17 @@ import logging
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QShortcut
 from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDockWidget,
     QFileDialog,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QSplitter,
     QStatusBar,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -63,6 +68,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("酷和弦 — Cool Chord EDM Synthesizer")
         self.resize(1400, 900)
 
+        from PySide6.QtCore import QSettings
+
         self.sequencer_transport = Transport()
         self.audio_engine = AudioEngine(transport=self.sequencer_transport)
         self.piano_roll_model = PianoRollModel(self.sequencer_transport)
@@ -73,7 +80,10 @@ class MainWindow(QMainWindow):
         self._setup_statusbar()
         self._connect_signals()
         self._setup_shortcuts()
-        self._start_audio_engine()
+
+        saved_device_raw = QSettings("CoolChord", "Audio").value("output_device", None)
+        saved_device: str | None = saved_device_raw if isinstance(saved_device_raw, str) else None
+        self._start_audio_engine(device_name=saved_device)
 
     def _setup_central(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -212,11 +222,12 @@ class MainWindow(QMainWindow):
         QShortcut(Qt.Key.Key_Space, self, self._on_transport_play)
         QShortcut(Qt.Key.Key_Escape, self, self._on_transport_stop)
 
-    def _start_audio_engine(self) -> None:
+    def _start_audio_engine(self, device_name: str | None = None) -> None:
         try:
-            self.audio_engine.start()
+            self.audio_engine.start(device_name=device_name)
             logger.info("Audio engine started")
-            self.statusBar().showMessage("Audio engine running — 44100 Hz, 512 samples")
+            dev_info = f" [{device_name}]" if device_name else ""
+            self.statusBar().showMessage(f"Audio engine running — 44100 Hz, 512 samples{dev_info}")
         except Exception as e:
             logger.error(f"Failed to start audio engine: {e}")
             self.statusBar().showMessage(f"Audio error: {e}")
@@ -461,9 +472,51 @@ class MainWindow(QMainWindow):
         self._transport_dock.setVisible(not self._transport_dock.isVisible())
 
     def _on_audio_settings(self) -> None:
-        devices = AudioEngine.list_devices()
-        names = "\n".join(f"  {d}" for d in devices[:20]) if devices else "  (no devices found)"
-        QMessageBox.information(self, "Audio Devices", f"Available audio devices:\n{names}")
+        import sounddevice as sd
+        from PySide6.QtCore import QSettings
+
+        devices = sd.query_devices()
+        output_devices: list[tuple[int, str, int]] = []
+        default_output = sd.default.device[1] if sd.default.device and sd.default.device[1] is not None else -1
+        for i, dev in enumerate(devices):
+            if dev["max_output_channels"] > 0:
+                name = dev["name"]
+                ch = dev["max_output_channels"]
+                output_devices.append((i, name, ch))
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Audio Output Device")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Select the audio output device (e.g., headphones):")
+        layout.addWidget(label)
+
+        combo = QComboBox()
+        current_device = self.audio_engine._output_stream.device if self.audio_engine._output_stream else None
+        for idx, (dev_idx, name, ch) in enumerate(output_devices):
+            mark = " [default]" if dev_idx == default_output else ""
+            combo.addItem(f"{name}{mark} ({ch} ch)", dev_idx)
+            if (current_device is not None and dev_idx == current_device) or (current_device is None and dev_idx == default_output):
+                combo.setCurrentIndex(idx)
+        layout.addWidget(combo)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            dev_idx = combo.currentData()
+            dev_name = combo.currentText().split(" [")[0].split(" (")[0]
+            # Save preference
+            QSettings("CoolChord", "Audio").setValue("output_device", dev_name)
+            # Restart engine with new device
+            was_running = self.audio_engine.is_running
+            if was_running:
+                self.audio_engine.stop()
+            self._start_audio_engine(device_name=dev_name)
+            self.statusBar().showMessage(f"Audio device: {dev_name}")
 
     def _on_about(self) -> None:
         QMessageBox.about(

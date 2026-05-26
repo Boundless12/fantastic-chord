@@ -13,6 +13,7 @@ class InstrumentType(Enum):
 
     SYNTH = auto()
     DRUMS = auto()
+    PIANO = auto()
 
 
 @dataclass

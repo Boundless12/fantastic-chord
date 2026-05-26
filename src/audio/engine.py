@@ -21,12 +21,13 @@ from ..sequencer.drum_sequencer import DrumSequencer, TriggerEvent
 from ..sequencer.piano_roll_sequencer import PianoRollSequencer
 from ..sequencer.transport import Transport
 from .compressor import EQ, Compressor
-from .constants import BLOCK_SIZE, CHANNELS, MAX_DRUM_VOICES, MAX_SYNTH_VOICES, SAMPLE_RATE
+from .constants import BLOCK_SIZE, CHANNELS, MAX_DRUM_VOICES, MAX_PIANO_VOICES, MAX_SYNTH_VOICES, SAMPLE_RATE
 from .drum_kit import DRUM_KIT_PRESETS, DrumKitPreset
 from .drum_synth import DrumSynth
 from .drum_voice import DrumVoice
 from .effects import BitCrusher, Chorus, Delay, Distortion, Reverb
 from .patch import Patch
+from .piano_voice import PianoVoice
 from .synth_voice import SynthVoice
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,11 @@ class AudioEngine:
 
         self._current_patch: Patch | None = None
         self._track_types: list[str] = ["synth"]
+
+        # Piano voice pool
+        self.piano_voices = [PianoVoice(sample_rate) for _ in range(MAX_PIANO_VOICES)]
+        self._piano_note_to_voice: dict[int, int] = {}
+        self._piano_voice_ages = [0] * MAX_PIANO_VOICES
 
         self.reverb = Reverb()
         self.delay = Delay()
@@ -250,10 +256,45 @@ class AudioEngine:
         self._drum_voice_ages[oldest_idx] = 0
         return oldest_idx
 
+    def _allocate_piano_voice(self, note: int) -> int | None:
+        """Find a free piano voice or steal the oldest one."""
+        if note in self._piano_note_to_voice:
+            existing = self._piano_note_to_voice[note]
+            self.piano_voices[existing].note_off()
+            del self._piano_note_to_voice[note]
+
+        for i, voice in enumerate(self.piano_voices):
+            if not voice.active and voice.is_finished():
+                self._piano_note_to_voice[note] = i
+                self._piano_voice_ages[i] = 0
+                return i
+
+        oldest_idx = 0
+        oldest_age = -1
+        for i, voice in enumerate(self.piano_voices):
+            if voice.active and self._piano_voice_ages[i] > oldest_age:
+                oldest_age = self._piano_voice_ages[i]
+                oldest_idx = i
+
+        for n, v in list(self._piano_note_to_voice.items()):
+            if v == oldest_idx:
+                del self._piano_note_to_voice[n]
+                break
+        self._piano_note_to_voice[note] = oldest_idx
+        self._piano_voice_ages[oldest_idx] = 0
+        return oldest_idx
+
     # -- Direct voice methods (called from audio callback, no queue) --
 
     def set_track_types(self, types: list[str]) -> None:
         self._track_types = types
+
+    def note_on_piano(self, note: int, velocity: int) -> None:
+        """Trigger a piano voice directly (skips synth effects chain)."""
+        self.command_queue.put(("piano_note_on", str(note), str(velocity)))
+
+    def note_off_piano(self, note: int) -> None:
+        self.command_queue.put(("piano_note_off", str(note)))
 
     def _get_track_type(self, track_index: int) -> str:
         if track_index < len(self._track_types):
@@ -275,6 +316,12 @@ class AudioEngine:
             )
             return
 
+        if track_type == "piano":
+            v_idx = self._allocate_piano_voice(note)
+            if v_idx is not None:
+                self.piano_voices[v_idx].note_on(note, velocity)
+            return
+
         if note in self._note_to_voice:
             existing = self._note_to_voice[note]
             self.voices[existing].note_off()
@@ -283,6 +330,14 @@ class AudioEngine:
             self.voices[v_idx].note_on(note, velocity)
 
     def _note_off_direct(self, note: int, track_index: int = 0) -> None:
+        track_type = self._get_track_type(track_index)
+        if track_type == "piano":
+            if note in self._piano_note_to_voice:
+                v_idx = self._piano_note_to_voice[note]
+                self.piano_voices[v_idx].note_off()
+                del self._piano_note_to_voice[note]
+            return
+
         if note in self._note_to_voice:
             v_idx = self._note_to_voice[note]
             self.voices[v_idx].note_off()
@@ -349,6 +404,20 @@ class AudioEngine:
                 self.voices[v_idx].note_off()
                 del self._note_to_voice[note]
 
+        elif cmd_type == "piano_note_on":
+            note = int(cmd[1])
+            velocity = int(cmd[2])
+            v_idx = self._allocate_piano_voice(note)
+            if v_idx is not None:
+                self.piano_voices[v_idx].note_on(note, velocity)
+
+        elif cmd_type == "piano_note_off":
+            note = int(cmd[1])
+            if note in self._piano_note_to_voice:
+                v_idx = self._piano_note_to_voice[note]
+                self.piano_voices[v_idx].note_off()
+                del self._piano_note_to_voice[note]
+
         elif cmd_type == "param":
             param_path = cmd[1]
             value = float(cmd[2])
@@ -363,6 +432,10 @@ class AudioEngine:
                 if voice.active:
                     voice.note_off()
             self._note_to_voice.clear()
+            for pv in self.piano_voices:
+                if pv.active:
+                    pv.note_off()
+            self._piano_note_to_voice.clear()
             for dv in self.drum_voices:
                 dv.reset()
 
@@ -379,6 +452,9 @@ class AudioEngine:
             for voice in self.voices:
                 voice.active = False
             self._note_to_voice.clear()
+            for pv in self.piano_voices:
+                pv.active = False
+            self._piano_note_to_voice.clear()
             for dv in self.drum_voices:
                 dv.reset()
             self._clear_effects()
@@ -501,6 +577,16 @@ class AudioEngine:
                     if voice.is_finished():
                         voice.active = False
 
+            # Render piano voices
+            for i, pv in enumerate(self.piano_voices):
+                if pv.active:
+                    block = pv.render_block(frames)
+                    mixed[:, 0] += block * pv.pan_left
+                    mixed[:, 1] += block * pv.pan_right
+                    self._piano_voice_ages[i] += 1
+                    if pv.is_finished():
+                        pv.active = False
+
             # Render drum voices
             for i, dv in enumerate(self.drum_voices):
                 if dv.active:
@@ -590,6 +676,15 @@ class AudioEngine:
                     self._voice_ages[i] += 1
                     if voice.is_finished():
                         voice.active = False
+            # Render piano voices into synth stem
+            for i, pv in enumerate(self.piano_voices):
+                if pv.active:
+                    block = pv.render_block(frames)
+                    synth_mix[:, 0] += block * pv.pan_left
+                    synth_mix[:, 1] += block * pv.pan_right
+                    self._piano_voice_ages[i] += 1
+                    if pv.is_finished():
+                        pv.active = False
             np.tanh(synth_mix, out=synth_mix)
             stem_synth[offset : offset + frames] = synth_mix
 
@@ -655,7 +750,8 @@ class AudioEngine:
         # Check if anything is active (voices or transport)
         has_active_voices = any(v.active for v in self.voices)
         has_active_drums = any(dv.active for dv in self.drum_voices)
-        if not has_active_voices and not has_active_drums and not self.transport.is_playing:
+        has_active_piano = any(pv.active for pv in self.piano_voices)
+        if not has_active_voices and not has_active_drums and not has_active_piano and not self.transport.is_playing:
             outdata.fill(0)
             return
 
@@ -684,6 +780,17 @@ class AudioEngine:
         synth_mix = self.distortion.process(synth_mix)
         synth_mix = self.compressor.process(synth_mix)
 
+        # Render piano voices separately (dry, no effects)
+        piano_mix = np.zeros((frames, CHANNELS), dtype=np.float32)
+        for i, pv in enumerate(self.piano_voices):
+            if pv.active:
+                block = pv.render_block(frames)
+                piano_mix[:, 0] += block * pv.pan_left
+                piano_mix[:, 1] += block * pv.pan_right
+                self._piano_voice_ages[i] += 1
+                if pv.is_finished():
+                    pv.active = False
+
         # Render drum voices separately (dry, no effects)
         drum_mix = np.zeros((frames, CHANNELS), dtype=np.float32)
         for i, dv in enumerate(self.drum_voices):
@@ -695,8 +802,8 @@ class AudioEngine:
                 if dv.is_finished():
                     dv.active = False
 
-        # Combine synth + drums
-        mixed = synth_mix + drum_mix
+        # Combine synth + piano + drums
+        mixed = synth_mix + piano_mix + drum_mix
 
         # Master volume
         mixed *= self.master_volume

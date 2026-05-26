@@ -94,7 +94,7 @@ class TrackListWidget(QWidget):
             row_layout.addWidget(name_label, 1)
 
             type_combo = QComboBox()
-            type_combo.addItems(["Synth", "Drums"])
+            type_combo.addItems(["Synth", "Drums", "Piano"])
             type_combo.setCurrentText(track.instrument_type.name.title())
             type_combo.setFixedWidth(70)
             type_combo.setStyleSheet(
@@ -115,7 +115,12 @@ class TrackListWidget(QWidget):
 
         t = track
         if hasattr(t, "instrument_type"):
-            t.instrument_type = InstrumentType.DRUMS if text == "Drums" else InstrumentType.SYNTH
+            if text == "Drums":
+                t.instrument_type = InstrumentType.DRUMS
+            elif text == "Piano":
+                t.instrument_type = InstrumentType.PIANO
+            else:
+                t.instrument_type = InstrumentType.SYNTH
         self.track_types_changed.emit()
 
     def _get_track_types(self) -> list[str]:
